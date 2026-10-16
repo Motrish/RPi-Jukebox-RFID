@@ -35,6 +35,12 @@ Weitere vorhandene Bereiche laut vollständiger Treeabfrage: components/playermp
 
 Keine dieser geprüften Dateien bietet workflow_dispatch. Der isolierte Integrationscommit löst die betreffenden Pfadfilter durch die unveränderte vollständige V3-Übernahme aus. Exakte Jobresultate werden separat protokolliert; gestartete Jobs sind noch kein bestandener Build. Die Releaseautomatik mit Upstream-Ownerbindung gehört nicht zum verwendeten Baseline-Test und wird nicht für den Nutzer-Fork als funktionierend behauptet.
 
+## Zusätzliche bestätigte Player-Einhängepunkte
+
+- resources/default-settings/jukebox.default.yaml ordnet modules.named.player dem Paket playermpd zu; seine Defaultkonfiguration setzt RPC-WebSocket auf 5556 und Pub/Sub-WebSocket auf 5557.
+- components/playermpd/__init__.py registriert PlayerMPD unter Pluginname ctrl. Start/Stop/Pause, Seek, Play-Folder/Album/Single und Playliststatus sind dort gebündelt; remove/move sind am Basiscommit noch nicht implementiert.
+- _mpd_status_poll sendet playerstatus; ein adaptereigener Stop ersetzt keine zentrale Generation-/Queuehoheit.
+
 ## Architekturentscheidungen für A01/A02
 
 - Geschützter same-origin-Zugang ist konkret neu anzubinden. Raw-RPC-/PubSub-Ports dürfen nicht als bereits abgesicherte API dargestellt werden.
@@ -45,3 +51,12 @@ Keine dieser geprüften Dateien bietet workflow_dispatch. Der isolierte Integrat
 ## Offene Voraussetzungen
 
 Lokaler Gittransport und Worktrees bleiben blockiert. Beide aktiven Subagenten meldeten ein Nutzungslimit; Luna-Coding kann deshalb aktuell nicht fortgesetzt werden. Astra und Sol-Coding werden nicht als Ersatz verwendet. Geräteangaben und sichtbare Referenz fehlen weiter.
+
+## Tatsächlicher CI-Zwischenstand
+
+- Webbuild am unveränderten V3-Tree: bestanden (Run 38955136477).
+- Pythonmatrix 3.9 bis 3.13: bestanden (Run 38955136500).
+- V3-Markdown: bestanden (Run 38955136416).
+- Installationsworkflow 38955136828: Bullseye-armv7-Basisimage schlägt beim apt-Paketdownload mit mehreren HTTP-404-Antworten fehl; Buildexit 100. Der Installer wurde in diesem Job nicht erreicht. Es handelt sich um einen Fehler der unveränderten Baseline, nicht um neu implementierten Code.
+- Bookworm-armv7-Basisimage ist noch im Aufbau; keine erfolgreiche Installation behauptet.
+- Markdownprüfung des Dokumentations-PRs nach Formatkorrektur: bestanden (Runs 38955705551 und 38955697813).
