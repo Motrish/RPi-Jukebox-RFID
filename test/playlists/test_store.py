@@ -85,6 +85,48 @@ class PlaylistStoreTests(unittest.TestCase):
         self.assertEqual(2, len(playlist["entries"]))
         self.assertEqual(first, self.store.get_command("cmd_create"))
 
+    def test_concurrent_appends_at_same_revision_apply_once_and_store_conflict(self):
+        created = self.store.execute(create(items=[]))
+        playlist_id = created["result"]["playlist"]["playlistId"]
+        commands = (
+            append("cmd_race_one", playlist_id, 0, [{"mediaRef": LOCAL, "title": "One"}]),
+            append("cmd_race_two", playlist_id, 0, [{"mediaRef": LOCAL, "title": "Two"}]),
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            results = list(workers.map(self.store.execute, commands))
+
+        self.assertEqual(["APPLIED", "REJECTED"], sorted(result["status"] for result in results))
+        applied = next(result for result in results if result["status"] == "APPLIED")
+        rejected = next(result for result in results if result["status"] == "REJECTED")
+        self.assertEqual("REVISION_CONFLICT", rejected["error"]["code"])
+        self.assertEqual(0, rejected["error"]["details"]["conflicts"][0]["expectedRevision"])
+        self.assertEqual(1, rejected["error"]["details"]["conflicts"][0]["actualRevision"])
+        self.assertEqual(1, applied["result"]["playlist"]["revision"])
+        self.assertEqual(1, len(self.store.get_playlist(playlist_id)["entries"]))
+        for command, result in zip(commands, results):
+            self.assertEqual(result, self.store.get_command(command["commandId"]))
+
+    def test_store_busy_does_not_claim_command_and_retry_after_unlock_applies_once(self):
+        command = create("cmd_wait_for_store")
+        lock = sqlite3.connect(self.store._db_path, timeout=0.1, isolation_level=None)
+        try:
+            lock.execute("BEGIN IMMEDIATE")
+            with self.assertRaises(StoreError) as busy:
+                self.store.execute(command)
+            self.assertEqual("STORE_BUSY", busy.exception.error["code"])
+            with self.assertRaises(StoreError) as unclaimed:
+                self.store.get_command(command["commandId"])
+            self.assertEqual("COMMAND_NOT_FOUND", unclaimed.exception.error["code"])
+        finally:
+            lock.rollback()
+            lock.close()
+
+        applied = self.store.execute(command)
+        self.assertEqual("APPLIED", applied["status"])
+        self.assertEqual(applied, self.store.execute(command))
+        self.assertEqual(applied, self.store.get_command(command["commandId"]))
+
     def test_same_command_id_with_different_payload_does_not_mutate(self):
         original = self.store.execute(create())
         altered = self.store.execute(create(name="Changed"))
@@ -196,16 +238,35 @@ class PlaylistStoreTests(unittest.TestCase):
 
     def test_exception_during_result_persistence_rolls_back_mutation_and_command_claim(self):
         command = create()
-        with mock.patch.object(self.store, "_write_command_result", side_effect=RuntimeError("simulated interruption")):
+        original_create = self.store._create
+        generated = {}
+
+        def create_then_interrupt(conn, request):
+            result = original_create(conn, request)
+            generated["playlist_id"] = result["result"]["playlist"]["playlistId"]
+            raise RuntimeError("simulated interruption")
+
+        with mock.patch.object(self.store, "_create", side_effect=create_then_interrupt):
             with self.assertRaisesRegex(RuntimeError, "simulated interruption"):
                 self.store.execute(command)
 
+        self.assertIn("playlist_id", generated)
         with self.assertRaises(StoreError) as no_command:
             self.store.get_command("cmd_create")
         self.assertEqual("COMMAND_NOT_FOUND", no_command.exception.error["code"])
         with self.assertRaises(StoreError) as no_playlist:
-            self.store.get_playlist("any_generated_id")
+            self.store.get_playlist(generated["playlist_id"])
         self.assertEqual("NOT_FOUND", no_playlist.exception.error["code"])
+
+        db = sqlite3.connect(self.store._db_path)
+        try:
+            counts = {
+                table: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("playlists", "playlist_entries", "command_log")
+            }
+        finally:
+            db.close()
+        self.assertEqual({"playlists": 0, "playlist_entries": 0, "command_log": 0}, counts)
 
     def test_committed_but_lost_response_is_recoverable_by_same_command_id(self):
         command = create()
