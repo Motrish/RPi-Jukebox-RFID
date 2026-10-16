@@ -8,9 +8,9 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 | Ticket | Arbeitspaket | Status | Ergebnis-SHA / Nachweis |
 | --- | --- | --- | --- |
-| F01 | Git- und Testumgebung verfügbar machen | in_progress | Luna prüft Gittransport; API-Dokumentationsbranch erstellt |
-| F02 | Vollständige V3-Basis im Fork | in_progress | Luna prüft Upstream-Commit und Objekterreichbarkeit im Fork |
-| F03 | Baseline, Schnittstelleninventur und Build | planned | Noch keine Produktumsetzung |
+| F01 | Git- und Testumgebung verfügbar machen | blocked | API-Schreiben/Zurücklesen bestätigt; lokaler Checkout/Worktrees weiterhin gesperrt |
+| F02 | Vollständige V3-Basis im Fork | implemented | feature/foundation = 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Remotehistorie geprüft, lokaler Nachweis offen |
+| F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild erfolgreich; Python/Installations-CI läuft; Quellen-Teilbericht vorhanden |
 | F04 | Zielgerät und Testressourcen festhalten | blocked | Geräteangaben asynchron angefragt; unabhängige Arbeit läuft |
 | F05 | Designreferenz verfügbar machen | blocked | Abruf erneut fehlgeschlagen; tasks/f05-design-report.md |
 | A01 | Verbindliche Prosa-Verträge | planned | Noch keine Produktumsetzung |
@@ -55,7 +55,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 - Git-CLI-Netzwerkzugriff ist aktuell blockiert; F01 benötigt einen zulässigen ausführbaren Entwicklungsarbeitsplatz.
 - Fork enthält nach letztem Check nur develop; V3-Objekte und Basisbranch in F02 bereitstellen.
-- Connector meldet push/admin; echter Branch-/Commit-Schreibtest und Workflowrechte in F01 noch offen.
+- Connector-Schreibweg tatsächlich durch Commit/Ref/Datei-Zurücklesen bestätigt; Änderungen von Workflowdateien weiterhin nicht separat geprüft.
 - Zielgerät, OS-Abbild, PiSugar-Modell, Audio/Reader und Spotify-Zugang noch nicht erfasst.
 - Referenzgrafik bislang nicht abrufbar; F05 offen.
 
@@ -82,4 +82,11 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 - Unabhängige Testplanung durch gpt-6-luna: Mockgrenzen, reale Hardwarepflichten und exklusive Ressourcenvergabe aufgenommen.
 - Finaler Konsistenzreview abgeschlossen: 42 Top-Level-Tickets, Modell-/Slot-/Schreibregeln konsistent. Befunde zur frühen lokalen Hardwareanbindung P07a und zum zentralen U03-Steuerpfad korrigiert; I03/U05 vor Vergabe verbindlich geteilt, S02/I05-Nachweisabhängigkeit präzisiert.
 
+## Ausführung am 16.10.2026
 
+- Dokumentationsbranch docs/development-plan und Draft-PR 1 veröffentlicht; neun Dateien unverändert zurückgelesen.
+- feature/foundation enthält die unveränderte V3-Releasebasis; develop blieb unverändert.
+- future3/ci-baseline bei 58826fcf880f521292c56c43b682fa67cfdc2418 hat exakt den Upstream-V3-Dateibaum; vorhandene CI wurde dadurch ausgelöst.
+- V3-Webbuild und V3-Markdown sind erfolgreich; Python-/Installerresultate zum Zeitpunkt dieses Status noch offen.
+- Dokumentationsformat korrigiert, um den fehlgeschlagenen Markdowncheck des Plan-PRs zu beheben.
+- Beide aktiven Subagenten meldeten das Nutzungslimit, Wiederverfügbarkeit laut Meldung 23:06 Uhr. Coding bleibt Luna zugeordnet; keine Astra-/Sol-Coding-Ersatzroute.

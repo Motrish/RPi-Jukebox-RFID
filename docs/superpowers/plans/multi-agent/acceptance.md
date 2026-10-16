@@ -5,7 +5,7 @@ Dieser Plan ergänzt den [Hauptplan](../2026-10-16-phoniebox-multi-agent-plan.md
 ## Nachweisarten
 
 | Ebene | Belegt | Belegt nicht |
-|---|---|---|
+| --- | --- | --- |
 | Unit | Queue-Zustände, Reihenfolge, Validierung, Retry-/Backoff-Regeln, Log-Redigierung | Dienste, Hardware oder hörbares Audio |
 | API-/Komponentenvertrag | Schemas, Authentifizierung, Konflikte, Events, Workerzustände | Kompatibilität mit installiertem Phoniebox-/MPD-/PiSugar-Stand |
 | Browser | Navigation, Viewports, Fokus, Fehlerzustände, Wiederverbindung | Gültiger Spotify-Zugriff, vertrauenswürdiges Zertifikat, Audio |
@@ -17,7 +17,7 @@ Für jeden Nachweis werden Ebene, getesteter Commit/Bundlestand, Ergebnis und of
 ## Szenarien
 
 | Bereich | Eingabe/Aktion | Erwartetes Ergebnis | Erforderlicher Nachweis |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Playlist-Speicherung | Zwei lokale Titel mit gleichem Namen und unterschiedlichen Bibliotheks-IDs speichern/laden | Titel bleiben unterscheidbar; IDs und Reihenfolge bleiben stabil | Unit + SQLite/API-Vertrag; Pi-Stichprobe |
 | Revisionenkonflikt | Zwei Clients laden dieselbe Revision; Client A ändert die Queue, B schreibt anschließend auf alter Revision | B erhält Konflikt und kann neu laden; keine stille Überschreibung | Unit/Vertrag; anschließend zwei Browser |
 | Quellenwechsel | Lokal → Spotify → lokal abspielen | Nur ein Anbieter gleichzeitig; nächster Start erst nach bestätigtem Stop | Mock-Zustandsautomat; danach MPD und Soloist am Pi |
@@ -63,8 +63,7 @@ Jedes Ticket hat genau einen Codeeigentümer. Koordinator editiert keine gemeins
 ## 4-Slot-Wellenbelegung
 
 Die verbindliche Wellenreihenfolge, Rollenverteilung und Review-Slot-Rotation stehen in Abschnitt 6 des [Hauptplans](../2026-10-16-phoniebox-multi-agent-plan.md). Dieser Abnahmeplan übernimmt dessen Höchstgrenze von vier aktiven Slots (Root/Koordinator plus höchstens drei Agents); ein Reviewer ersetzt einen Arbeitsslot. Sol kann Code lesen und reviewen, aber keine Patches liefern. Ausführbare Änderungen, technische Integration und Fixes erledigt Luna; Root führt nur mechanische Integrationsschritte aus. Pro Box, SD-Karte und Spotify-Session bleibt genau ein exklusiver Besitzer zuständig.
+
 ## Freigabekriterium
 
 Releasefreigabe setzt einen nachvollziehbaren Ziel-Commit samt passendem Bundle, frische Installation auf der festgelegten OS-/Pi-Konfiguration, gemischte Wiedergabe per Web/RFID/Tasten bei geschlossenem Browser, exklusive Quellenwechsel, PiSugar-Ausfallunterscheidung, Neustart/Netzverlust/Installer-Wiederaufnahme sowie Import und Rückweg auf separater SD voraus. Fehlende Konten oder Hardware lassen den zugehörigen Beleg offen; ein Mock ersetzt ihn nicht.
-
-

@@ -177,6 +177,3 @@ Tokens, Keys, echte Musik und gerätespezifische Secrets weder in Briefings noch
 Zuerst F01–F05: Arbeitsumgebung, V3-Basis, Baseline, Geräteinventur, sichtbare Referenz. Danach A01/A02-Verträge, S01/P01/P02-Machbarkeit sowie U01-Design. Produktimplementierung erst nach den zugehörigen Startbedingungen, ohne auf eine künstliche globale Freigabe aller unabhängigen Teile zu warten.
 
 Alle detaillierten Tickets, Modelle und Szenarien stehen im [Backlog](multi-agent/backlog.md).
-
-
-

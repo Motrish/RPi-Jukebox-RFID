@@ -369,4 +369,3 @@ A02, P03/P04, U02 und isolierte Adaptertests dürfen nach ihren Basisabhängigke
 S03/S04 dürfen gegen den implementierten S02-Vertrag mit synthetischen Antworten beginnen; ihre echten OAuth-/Katalognachweise bleiben bis zum funktionierenden HTTPS-Weg offen. I05 darf dafür unabhängig von I04 vorgezogen werden. S02 und I05 haben keine zirkuläre Codingabhängigkeit: OAuth wird nach A01/A02 gegen Contractfixtures entwickelt; I05 stellt gegebenenfalls das reale HTTPS bereit. S02 bekommt bis zur realen Anmeldung den Status implemented mit offenem Hardware-/Endgerätenachweis, nicht verified.
 
 Q01 ist ein wiederkehrender Auftrag mit einzelnen Kindtickets je Diff; Q02 fasst Browsernachweise zusammen, Q03 besitzt die reale Gesamtabnahme. Diese Rollen erzeugen keine zusätzlichen gleichzeitigen Slots.
-
