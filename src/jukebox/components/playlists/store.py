@@ -12,6 +12,7 @@ from jukebox.contracts.v1 import (
     validate_command_result,
     validate_error,
     validate_identifier,
+    validate_queue_snapshot,
     validate_playlist_snapshot,
 )
 
@@ -40,9 +41,18 @@ class PlaylistStore:
             "PLAYLIST_REMOVE": self._remove,
             "PLAYLIST_MOVE": self._move,
             "PLAYLIST_DELETE": self._delete,
+            "QUEUE_CREATE": self._queue_create,
+            "QUEUE_LOAD_PLAYLIST": self._queue_load_playlist,
+            "QUEUE_APPEND": self._queue_append,
+            "QUEUE_REMOVE": self._queue_remove,
+            "QUEUE_MOVE": self._queue_move,
+            "QUEUE_SET_MODES": self._queue_set_modes,
+            "QUEUE_SET_CURRENT": self._queue_set_current,
+            "QUEUE_SAVE_NEW_PLAYLIST": self._queue_save_new_playlist,
+            "QUEUE_SAVE_PLAYLIST": self._queue_save_playlist,
         }.get(parsed["action"])
         if handler is None:
-            raise NotImplementedError("This store slice supports playlist write actions only.")
+            raise NotImplementedError("This store slice supports playlist and queue write actions only.")
         request_json = _canonical_json(parsed)
         conn = self._connect("PLAYLIST_WRITE")
         try:
@@ -130,6 +140,40 @@ class PlaylistStore:
         except sqlite3.DatabaseError:
             _rollback_quietly(conn)
             raise _store_error("STORE_UNAVAILABLE", "PLAYLIST_GET") from None
+        except Exception:
+            _rollback_quietly(conn)
+            raise
+        finally:
+            conn.close()
+
+    def get_queue(self, queue_id: str) -> Dict[str, Any]:
+        queue_id = validate_identifier(queue_id, "queueId")
+        conn = self._connect("QUEUE_GET")
+        try:
+            conn.execute("BEGIN")
+            row = conn.execute(
+                "SELECT revision, source_playlist_id, source_playlist_revision, current_entry_id, "
+                "repeat_mode, shuffle_mode FROM queues WHERE queue_id = ?", (queue_id,),
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                raise _store_error(
+                    "NOT_FOUND", "QUEUE_GET", {"objectType": "queue", "objectId": queue_id},
+                    "The requested queue was not found.",
+                )
+            entries = conn.execute(
+                "SELECT entry_id, source_entry_id, media_ref_json, title, position FROM queue_entries "
+                "WHERE queue_id = ? ORDER BY position ASC", (queue_id,),
+            ).fetchall()
+            snapshot = self._queue_snapshot_from_rows(queue_id, row, entries)
+            conn.commit()
+            return snapshot
+        except sqlite3.OperationalError as exc:
+            _rollback_quietly(conn)
+            raise self._database_error(exc, "QUEUE_GET") from None
+        except sqlite3.DatabaseError:
+            _rollback_quietly(conn)
+            raise _store_error("STORE_UNAVAILABLE", "QUEUE_GET") from None
         except Exception:
             _rollback_quietly(conn)
             raise
@@ -323,6 +367,312 @@ class PlaylistStore:
             "deletedRevision": revision,
         })
 
+    def _queue_create(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue_id = _new_id("q")
+        conn.execute(
+            "INSERT INTO queues (queue_id, revision, source_playlist_id, source_playlist_revision, "
+            "current_entry_id, repeat_mode, shuffle_mode) VALUES (?, 0, NULL, NULL, NULL, 'OFF', 'OFF')",
+            (queue_id,),
+        )
+        for position, item in enumerate(command["items"]):
+            self._insert_queue_entry(conn, queue_id, position, item, None)
+        return self._applied(command, {"queue": self._queue_snapshot(conn, queue_id)})
+
+    def _queue_load_playlist(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_header(conn, command["queueId"])
+        playlist = conn.execute(
+            "SELECT name, revision FROM playlists WHERE playlist_id = ?", (command["playlistId"],)
+        ).fetchone()
+        if queue is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queue", "objectId": command["queueId"]},
+                "The requested queue was not found.",
+            )
+        if playlist is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "playlist", "objectId": command["playlistId"]},
+                "The requested playlist was not found.",
+            )
+        conflicts = []
+        if queue[0] != command["expectedQueueRevision"]:
+            conflicts.append(self._revision_conflict(
+                "queue", command["queueId"], command["expectedQueueRevision"], queue[0]
+            ))
+        if playlist[1] != command["expectedPlaylistRevision"]:
+            conflicts.append(self._revision_conflict(
+                "playlist", command["playlistId"], command["expectedPlaylistRevision"], playlist[1]
+            ))
+        if conflicts:
+            raise _DomainRejection(
+                "REVISION_CONFLICT", {"conflicts": conflicts},
+                "One or more objects changed since they were read.",
+            )
+        if queue[3] is not None:
+            raise _DomainRejection(
+                "ACTIVE_ENTRY_REQUIRES_CONTROLLER",
+                {"queueId": command["queueId"], "currentEntryId": queue[3]},
+                "The active queue entry must be cleared by the controller before loading a playlist.",
+            )
+        self._ensure_revision_available(command["queueId"], queue[0], "queue")
+        source_entries = conn.execute(
+            "SELECT entry_id, media_ref_json, title FROM playlist_entries "
+            "WHERE playlist_id = ? ORDER BY position ASC", (command["playlistId"],),
+        ).fetchall()
+        conn.execute("DELETE FROM queue_entries WHERE queue_id = ?", (command["queueId"],))
+        for position, item in enumerate(source_entries):
+            self._insert_queue_entry(
+                conn, command["queueId"], position,
+                {"mediaRef": json.loads(item[1]), "title": item[2]}, item[0],
+            )
+        conn.execute(
+            "UPDATE queues SET revision = ?, source_playlist_id = ?, source_playlist_revision = ?, "
+            "current_entry_id = NULL, repeat_mode = 'OFF', shuffle_mode = 'OFF' WHERE queue_id = ?",
+            (queue[0] + 1, command["playlistId"], playlist[1], command["queueId"]),
+        )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_append(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_for_edit(conn, command)
+        if command["items"]:
+            self._ensure_revision_available(command["queueId"], queue[0], "queue")
+            count = conn.execute(
+                "SELECT COUNT(*) FROM queue_entries WHERE queue_id = ?", (command["queueId"],)
+            ).fetchone()[0]
+            if count + len(command["items"]) > 10000:
+                raise _DomainRejection(
+                    "LIMIT_EXCEEDED", {"field": "items", "limit": 10000},
+                    "The queue entry limit would be exceeded.",
+                )
+            for position, item in enumerate(command["items"], start=count):
+                self._insert_queue_entry(conn, command["queueId"], position, item, None)
+            conn.execute(
+                "UPDATE queues SET revision = ? WHERE queue_id = ?",
+                (queue[0] + 1, command["queueId"]),
+            )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_remove(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_for_edit(conn, command)
+        entry_id = command["entryId"]
+        if queue[3] == entry_id:
+            raise _DomainRejection(
+                "ACTIVE_ENTRY_REQUIRES_CONTROLLER",
+                {"queueId": command["queueId"], "currentEntryId": queue[3]},
+                "The active queue entry must be cleared by the controller before removal.",
+            )
+        exists = conn.execute(
+            "SELECT 1 FROM queue_entries WHERE queue_id = ? AND entry_id = ?",
+            (command["queueId"], entry_id),
+        ).fetchone()
+        if exists is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queueEntry", "objectId": entry_id},
+                "The requested queue entry was not found.",
+            )
+        self._ensure_revision_available(command["queueId"], queue[0], "queue")
+        conn.execute(
+            "DELETE FROM queue_entries WHERE queue_id = ? AND entry_id = ?",
+            (command["queueId"], entry_id),
+        )
+        entry_ids = [row[0] for row in conn.execute(
+            "SELECT entry_id FROM queue_entries WHERE queue_id = ? ORDER BY position ASC",
+            (command["queueId"],),
+        ).fetchall()]
+        self._reindex_queue(conn, command["queueId"], entry_ids)
+        conn.execute(
+            "UPDATE queues SET revision = ? WHERE queue_id = ?",
+            (queue[0] + 1, command["queueId"]),
+        )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_move(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_for_edit(conn, command)
+        entry_ids = [row[0] for row in conn.execute(
+            "SELECT entry_id FROM queue_entries WHERE queue_id = ? ORDER BY position ASC",
+            (command["queueId"],),
+        ).fetchall()]
+        try:
+            old_position = entry_ids.index(command["entryId"])
+        except ValueError:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queueEntry", "objectId": command["entryId"]},
+                "The requested queue entry was not found.",
+            ) from None
+        to_position = command["toPosition"]
+        if to_position >= len(entry_ids):
+            raise _DomainRejection(
+                "POSITION_OUT_OF_RANGE",
+                {"entryId": command["entryId"], "minimum": 0, "maximum": len(entry_ids) - 1},
+                "The requested final queue position is out of range.",
+            )
+        if to_position != old_position:
+            self._ensure_revision_available(command["queueId"], queue[0], "queue")
+            entry_ids.insert(to_position, entry_ids.pop(old_position))
+            self._reindex_queue(conn, command["queueId"], entry_ids)
+            conn.execute(
+                "UPDATE queues SET revision = ? WHERE queue_id = ?",
+                (queue[0] + 1, command["queueId"]),
+            )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_set_modes(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_for_edit(conn, command)
+        if (queue[4], queue[5]) != (command["repeatMode"], command["shuffleMode"]):
+            self._ensure_revision_available(command["queueId"], queue[0], "queue")
+            conn.execute(
+                "UPDATE queues SET repeat_mode = ?, shuffle_mode = ?, revision = ? WHERE queue_id = ?",
+                (command["repeatMode"], command["shuffleMode"], queue[0] + 1, command["queueId"]),
+            )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_set_current(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_for_edit(conn, command)
+        entry_id = command["entryId"]
+        if entry_id is not None and conn.execute(
+            "SELECT 1 FROM queue_entries WHERE queue_id = ? AND entry_id = ?",
+            (command["queueId"], entry_id),
+        ).fetchone() is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queueEntry", "objectId": entry_id},
+                "The requested queue entry was not found.",
+            )
+        if queue[3] != entry_id:
+            self._ensure_revision_available(command["queueId"], queue[0], "queue")
+            conn.execute(
+                "UPDATE queues SET current_entry_id = ?, revision = ? WHERE queue_id = ?",
+                (entry_id, queue[0] + 1, command["queueId"]),
+            )
+        return self._applied(command, {"queue": self._queue_snapshot(conn, command["queueId"])})
+
+    def _queue_save_new_playlist(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        self._queue_for_edit(conn, command, revision_field="expectedQueueRevision")
+        playlist_id = _new_id("pl")
+        conn.execute(
+            "INSERT INTO playlists (playlist_id, name, revision) VALUES (?, ?, 0)",
+            (playlist_id, command["name"]),
+        )
+        for position, item in enumerate(self._queue_copy_rows(conn, command["queueId"])):
+            self._insert_entry(conn, playlist_id, position, item)
+        return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+
+    def _queue_save_playlist(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        queue = self._queue_header(conn, command["queueId"])
+        playlist = conn.execute(
+            "SELECT name, revision FROM playlists WHERE playlist_id = ?", (command["playlistId"],)
+        ).fetchone()
+        if queue is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queue", "objectId": command["queueId"]},
+                "The requested queue was not found.",
+            )
+        if playlist is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "playlist", "objectId": command["playlistId"]},
+                "The requested playlist was not found.",
+            )
+        conflicts = []
+        if queue[0] != command["expectedQueueRevision"]:
+            conflicts.append(self._revision_conflict(
+                "queue", command["queueId"], command["expectedQueueRevision"], queue[0]
+            ))
+        if playlist[1] != command["expectedPlaylistRevision"]:
+            conflicts.append(self._revision_conflict(
+                "playlist", command["playlistId"], command["expectedPlaylistRevision"], playlist[1]
+            ))
+        if conflicts:
+            raise _DomainRejection(
+                "REVISION_CONFLICT", {"conflicts": conflicts},
+                "One or more objects changed since they were read.",
+            )
+        self._ensure_revision_available(command["playlistId"], playlist[1], "playlist")
+        source_entries = self._queue_copy_rows(conn, command["queueId"])
+        conn.execute("DELETE FROM playlist_entries WHERE playlist_id = ?", (command["playlistId"],))
+        for position, item in enumerate(source_entries):
+            self._insert_entry(conn, command["playlistId"], position, item)
+        conn.execute(
+            "UPDATE playlists SET revision = ? WHERE playlist_id = ?",
+            (playlist[1] + 1, command["playlistId"]),
+        )
+        return self._applied(command, {"playlist": self._snapshot(conn, command["playlistId"])})
+
+    def _queue_header(self, conn: sqlite3.Connection, queue_id: str) -> Optional[tuple]:
+        return conn.execute(
+            "SELECT revision, source_playlist_id, source_playlist_revision, current_entry_id, "
+            "repeat_mode, shuffle_mode FROM queues WHERE queue_id = ?", (queue_id,),
+        ).fetchone()
+
+    def _queue_for_edit(self, conn: sqlite3.Connection, command: Dict[str, Any],
+                        revision_field: str = "expectedRevision") -> tuple:
+        queue = self._queue_header(conn, command["queueId"])
+        if queue is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queue", "objectId": command["queueId"]},
+                "The requested queue was not found.",
+            )
+        expected = command[revision_field]
+        if queue[0] != expected:
+            raise _DomainRejection(
+                "REVISION_CONFLICT", {"conflicts": [self._revision_conflict(
+                    "queue", command["queueId"], expected, queue[0]
+                )]}, "The queue changed since it was read.",
+            )
+        return queue
+
+    @staticmethod
+    def _revision_conflict(object_type: str, object_id: str, expected: int, actual: int) -> Dict[str, Any]:
+        return {"objectType": object_type, "objectId": object_id,
+                "expectedRevision": expected, "actualRevision": actual}
+
+    def _queue_copy_rows(self, conn: sqlite3.Connection, queue_id: str) -> list[Dict[str, Any]]:
+        rows = conn.execute(
+            "SELECT media_ref_json, title FROM queue_entries WHERE queue_id = ? ORDER BY position ASC",
+            (queue_id,),
+        ).fetchall()
+        return [{"mediaRef": json.loads(row[0]), "title": row[1]} for row in rows]
+
+    def _queue_snapshot(self, conn: sqlite3.Connection, queue_id: str) -> Dict[str, Any]:
+        header = self._queue_header(conn, queue_id)
+        entries = conn.execute(
+            "SELECT entry_id, source_entry_id, media_ref_json, title, position FROM queue_entries "
+            "WHERE queue_id = ? ORDER BY position ASC", (queue_id,),
+        ).fetchall()
+        return self._queue_snapshot_from_rows(queue_id, header, entries)
+
+    def _queue_snapshot_from_rows(self, queue_id: str, header: tuple, entries: list) -> Dict[str, Any]:
+        return validate_queue_snapshot({
+            "contractVersion": 1,
+            "queueId": queue_id,
+            "revision": header[0],
+            "sourcePlaylistId": header[1],
+            "sourcePlaylistRevision": header[2],
+            "entries": [{
+                "entryId": entry[0], "sourceEntryId": entry[1],
+                "mediaRef": json.loads(entry[2]), "title": entry[3], "position": entry[4],
+            } for entry in entries],
+            "currentEntryId": header[3],
+            "repeatMode": header[4],
+            "shuffleMode": header[5],
+        })
+
+    def _insert_queue_entry(self, conn: sqlite3.Connection, queue_id: str, position: int,
+                            item: Dict[str, Any], source_entry_id: Optional[str]) -> None:
+        conn.execute(
+            "INSERT INTO queue_entries "
+            "(entry_id, queue_id, source_entry_id, media_ref_json, title, position) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (_new_id("qe"), queue_id, source_entry_id,
+             _canonical_json(item["mediaRef"]), item["title"], position),
+        )
+
+    def _reindex_queue(self, conn: sqlite3.Connection, queue_id: str, entry_ids: list[str]) -> None:
+        conn.execute(
+            "UPDATE queue_entries SET position = position + 10001 WHERE queue_id = ?", (queue_id,)
+        )
+        conn.executemany(
+            "UPDATE queue_entries SET position = ? WHERE queue_id = ? AND entry_id = ?",
+            [(position, queue_id, entry_id) for position, entry_id in enumerate(entry_ids)],
+        )
+
     def _playlist_before_edit(self, conn: sqlite3.Connection,
                               command: Dict[str, Any]) -> tuple[str, int]:
         playlist_id = command["playlistId"]
@@ -346,12 +696,13 @@ class PlaylistStore:
             )
         return row[0], row[1]
 
-    def _ensure_revision_available(self, playlist_id: str, revision: int) -> None:
+    def _ensure_revision_available(self, playlist_id: str, revision: int,
+                                   object_type: str = "playlist") -> None:
         if revision >= 9007199254740991:
             raise _DomainRejection(
                 "REVISION_EXHAUSTED",
-                {"objectType": "playlist", "objectId": playlist_id},
-                "The playlist revision limit has been reached.",
+                {"objectType": object_type, "objectId": playlist_id},
+                f"The {object_type} revision limit has been reached.",
             )
 
     def _reindex(self, conn: sqlite3.Connection, playlist_id: str, entry_ids: list[str]) -> None:
@@ -445,6 +796,27 @@ class PlaylistStore:
                     command_id TEXT PRIMARY KEY,
                     request_json TEXT NOT NULL,
                     result_json TEXT
+                );
+                CREATE TABLE IF NOT EXISTS queues (
+                    queue_id TEXT PRIMARY KEY,
+                    revision INTEGER NOT NULL CHECK (revision >= 0),
+                    source_playlist_id TEXT,
+                    source_playlist_revision INTEGER CHECK (
+                        source_playlist_revision IS NULL OR source_playlist_revision >= 0
+                    ),
+                    current_entry_id TEXT,
+                    repeat_mode TEXT NOT NULL CHECK (repeat_mode IN ('OFF', 'ALL', 'ONE')),
+                    shuffle_mode TEXT NOT NULL CHECK (shuffle_mode IN ('OFF', 'ON')),
+                    CHECK ((source_playlist_id IS NULL) = (source_playlist_revision IS NULL))
+                );
+                CREATE TABLE IF NOT EXISTS queue_entries (
+                    entry_id TEXT PRIMARY KEY,
+                    queue_id TEXT NOT NULL REFERENCES queues(queue_id) ON DELETE CASCADE,
+                    source_entry_id TEXT,
+                    media_ref_json TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    position INTEGER NOT NULL CHECK (position >= 0),
+                    UNIQUE (queue_id, position)
                 );
             """)
         except sqlite3.DatabaseError:
