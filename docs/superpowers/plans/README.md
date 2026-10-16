@@ -31,3 +31,8 @@ Der geprüfte transportfreie Daten-/Speicherkern liegt auf [future3/modern-ui](h
 - [ARMv6-Spotify-Optionen und offene Nachweise](../../../tasks/armv6-spotify-options.md)
 - [B01a-PiSugar-Vertrag](../../../tasks/b01-pisugar-contract.md) und [Review](../../../tasks/b01-pisugar-review.md)
 - [P01a1-Providervertrag](../../../tasks/p01-local-provider-contract.md)
+
+- [P01a1-Implementierungsbericht](../../../tasks/p01-local-provider-report.md)
+
+- [P01a1-Review einschließlich Folgecommit](../../../tasks/p01-local-provider-review.md)
+- [P01-Stopgate-Regressionen](../../../tasks/p01-stop-gate-report.md)

@@ -15,7 +15,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F05 | Designreferenz verfügbar machen | blocked | Abruf erneut fehlgeschlagen; tasks/f05-design-report.md |
 | A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
 | A02 | Verträge technisch verankern | in_progress | A02a verified/integrated bei 9f5f400 (PR 3), 22 lokale Tests/Lint und volle Pythonmatrix bestanden; A02b/Anschluss offen |
-| P01 | Lokalen Anbieter kapseln | in_progress | P01a1-Vertrag durch Root freigegeben, vier neue Luna-Dateien auf 5057f0b; reale Session/Resolver/Hardware offen |
+| P01 | Lokalen Anbieter kapseln | in_progress | P01a1 verified als transportfreier Slice: 82d9547 reviewed, 25 Tests/Lint und volle CI erfolgreich, PR 9 als 1995a5c integriert; reale Session/Resolver/Hardware offen |
 | P02 | Quellenwechsel als Hardwareversuch | planned | Noch keine Produktumsetzung |
 | P03 | Playlist- und Queue-Speicherung | verified | Alle 15 Speicheraktionen, 36 Storetests + 22 Contracts, Python 3.9–3.13 und Review bestanden; PR 4/5/6 integriert, transportfreier Slice |
 | P04 | Serialisierte Wiedergabe und Abbruch | planned | Noch keine Produktumsetzung |
@@ -153,4 +153,18 @@ Q01-Storeproben bestanden inzwischen die komplette Pythonmatrix einschließlich 
 - Zero W und Raspberry Pi OS Lite 32 Bit erneut ausdrücklich bestätigt. ARMv6 ist verbindlich, kein Zero 2 W; f04-hardware-profile.md hält Nachweisgrenzen fest.
 - Q01-Storeproben: vollständige Pythonmatrix 38963718947 erfolgreich; PR 7 bei caa8ca919c86e242ab79e0813cc3d2d1622f1a70 integriert, Tree 7addf447bc51354995110b78df485778de611a1f.
 - B01a: unabhängiges Review ohne Sperrbefund, 20 Reader-Tests und Pythonmatrix 38966180905 erfolgreich; PR 8 bei 5057f0b60c4e85f595fd09450be8341f1f377c48 integriert. Tree 275461a89829869b545cb4e67b64adb47ebc47e3 bewahrt beide Linien.
-- ARMv6-Spotify-Recherche abgeschlossen: librespot-Cross-Rezept ist Kandidat, ABI/Auth/Einzeltrack/Stop offen. Aktuell nur ein Worker: Luna implementiert den Root-freigegebenen transportfreien P01a1-Vertrag. Kein Timer oder automatischer Wiederaufnahmeauftrag eingerichtet.
+- ARMv6-Spotify-Recherche abgeschlossen: librespot-Cross-Rezept ist Kandidat, ABI/Auth/Einzeltrack/Stop offen. Aktuell nur ein Worker: unabhängiges Sol-Review von P01a1 bei 7ede9cf. Luna-Code liegt in PR 9; Root15Tests/Lint erfolgreich, volle CI offen. Kein Timer oder automatischer Wiederaufnahmeauftrag eingerichtet.
+
+P01a1-Reviewbefund am 7ede9cf: Fehler beim Session-Kontextabschluss nach Wirkung kann START-Zuordnung zurückrollen bzw. STOP-Reservierung vorzeitig freigeben. PR 9 bleibt Draft, keine Integration. Luna korrigiert nach Abschluss des unabhängigen Reviews mit aussagekräftigen Exit-/epoch-/Deadline-Regressionen; bestandene bisherige Tests schließen diesen Befund nicht.
+
+P01a1 nach zwei Korrekturrunden enger geschnitten: Context-Exit-Fixes bestehen 21 Tests im noch unveröffentlichten Stage, aber Root findet verbleibende terminale STOP-Freigabe bei Fehler vor der Statusprüfung. Frischer Luna-xhigh-Worker besitzt ausschließlich adapter.py/test_adapter.py für diesen Randfall. Kein paralleler Reviewer/Coder, kein Merge. Danach vollständige Folgeprüfung am neuen SHA.
+
+P01a1-Folgereview bei 82d9547f5c4431e77ef9312f1ca5fbc1e5fe54d6 ohne Sperrbefund; ursprünglicher P1 am 7ede9cf bleibt historisch dokumentiert. Root und unabhängiger Reviewer führen 25 Tests erfolgreich aus. CI-Folgeläufe 38970106609 und 38970100321 sind beim Checkpoint queued, daher kein Merge. Keine aktiven Coding-/Reviewworker; Ressourcenmodus bleibt seriell.
+
+### P01a1-Integrationscheckpoint
+
+Folgecommit 82d9547f5c4431e77ef9312f1ca5fbc1e5fe54d6 unabhängig reviewed. Push-CI 38970100321 und PR-CI 38970106609 enthalten jeweils erfolgreiche Python-3.9–3.13-Jobs plus finish. PR 9 als 1995a5c21e1e41f33a5cc61c6a27a3f5c803f871 integriert; dessen Tree e565397f5a125e8c8d13e6db51489912e1d2ecf6 entspricht exakt dem geprüften Head. develop bleibt 42d5023e37dbf8de6477fef5ebcd6eae3cb5087d.
+
+P01a1 ist ausschließlich für den transportfreien Adaptervertrag verified; Gesamt-P01 bleibt in_progress wegen realer Session, LibraryResolver, vorhandener MPD-Integration und Zielgeräteprüfung. 25 lokale Adaptertests ergänzen 60 Core-/Store- und 20 PiSugarprüfungen. Die volle CI enthält einen echten kompletten Checkout, kein ARMv6-Audiogerät. Es laufen keine Worker.
+
+Nächster Schritt: reale Session-/Bibliotheksbindung und ARMv6-Spotify-Probe spezifizieren, erst nach den jeweiligen Voraussetzungen anschließen. Anfrage zu OS-Release und Audioanschluss ist offen; Test-SD und vollständiger Entwicklungscheckout fehlen weiter. Designgrafik bleibt nicht abrufbar. Kein Timer und keine automatische Wiederaufnahme eingerichtet.
