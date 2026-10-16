@@ -38,7 +38,7 @@ Unveränderten V3-Build und vorhandene Prüfungen ausführen. Tatsächliche Pyth
 
 **Owner:** C/A / Sol high, rein beschreibend. **Vorgänger:** keine. **Bereich:** Hardware-/OS-Matrix und Ressourcenregister.
 
-Pi-Modell, Bookworm-Abbild/Architektur, Audio, Reader/Tasten, PiSugar, Bestandsversion und externe Konten erfassen. Zweite SD und kontrolliertes Testnetz einplanen. Fehlende Angaben mit abhängigen Hardwaretickets markieren.
+Bestätigten Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs) festhalten; OS-Release/Abbild, Audio, Reader/Tasten, Bestandsversion und externe Konten ergänzen. Zweite SD und kontrolliertes Testnetz einplanen. Fehlende Angaben mit abhängigen Hardwaretickets markieren.
 
 **Abnahme/Prüfung:** konkretes erstes Zielsystem und sicherer Testaufbau benannt; niemand beansprucht kompatible ungetestete Modelle. Ohne Angaben bleibt das Ticket offen, unabhängige Planung läuft weiter.
 
@@ -84,7 +84,7 @@ Start, Pause, Resume, Seek nach Fähigkeit und bestätigtes Stoppen über den vo
 
 **Owner:** P / Luna xhigh. **Vorgänger:** P01, S01, F04. **Bereich:** isolierte Probe und Messprotokoll, keine fertige Queue-GUI.
 
-Lokale Datei → Soloist-Einzeltrack → lokale Datei über gemeinsame Ausgabe ausführen. Stopbestätigung, Titelende, Pause/Seek/Skip und Neustart untersuchen; Latenz hörbar/aufgezeichnet messen.
+Lokale Datei → geprüfter ARMv6-Spotify-Einzeltrack → lokale Datei über gemeinsame Ausgabe ausführen. Stopbestätigung, Titelende, Pause/Seek/Skip und Neustart untersuchen; Latenz hörbar/aufgezeichnet messen.
 
 **Abnahme/Prüfung:** zehn dokumentierte Wechsel, kein gleichzeitiger Anbieter; Prozessende nach Stop und natürliches Ende unterscheidbar. Unerfüllte Fähigkeiten begrenzen Produktvertrag. G1 erfordert diesen realen Nachweis.
 
@@ -106,13 +106,13 @@ Ein Controller und eine Enginehoheit; Instanzsperre, Generation vor/nach asynchr
 
 **Abnahme/Prüfung:** Skip während langsamen Starts erzeugt keinen verspäteten Ton; Stop während Wechsel startet keinen Nachfolger; doppelte Endereignisse schalten nur einmal. Timeout eines unbestätigten Stopps bleibt sichtbarer Fehler.
 
-### P05 – Soloist als zweiter Anbieter integrieren
+### P05 – ARMv6-Spotify-Anbieter integrieren
 
-**Owner:** S / Luna xhigh, Anschluss durch P/X seriell. **Vorgänger:** P02, P04, S01. **Bereich:** Soloist-Adapter und dessen Controlleranschluss in getrennten Schreibfenstern.
+**Owner:** S / Luna xhigh, Anschluss durch P/X seriell. **Vorgänger:** P02, P04, S01. **Bereich:** geprüfter ARMv6-Spotify-Adapter und dessen Controlleranschluss in getrennten Schreibfenstern.
 
-Geprüften Einzeltrackbetrieb in Providervertrag überführen. Sessionverzeichnis exklusiv besitzen, Exit/WS gemeinsam eindeutig klassifizieren, Abbruch alter Ausführung bestätigen.
+Geprüften Einzeltrackbetrieb in Providervertrag überführen. Sessionverzeichnis exklusiv besitzen, belegte Player-/Prozessereignisse gemeinsam eindeutig klassifizieren, Abbruch alter Ausführung bestätigen.
 
-**Abnahme/Prüfung:** alte Exit-/WS-Ereignisse ändern neuen Titel nicht; realer Mischdurchlauf ohne Browser; Prozessfehler und Buildablauf sichtbar. G3 noch nicht ohne P06/P07.
+**Abnahme/Prüfung:** alte Player-/Prozessereignisse ändern neuen Titel nicht; realer Mischdurchlauf ohne Browser; Prozessfehler und notwendige Reauthentifizierung sichtbar. G3 noch nicht ohne P06/P07.
 
 ### P06 – Playlistaktionen und Offline-Regeln
 
@@ -134,25 +134,25 @@ P07a nach P04: lokale RFID-/GPIO-/Timerpfade an den zentralen Controller anschli
 
 **Owner:** P/S / Luna xhigh, seriell am Controller. **Vorgänger:** P07. **Bereich:** Moduswechsel und Persistenztests.
 
-Bewusste Connect-Übernahme, Rückkehr und Crash/Reboot behandeln. Gespeicherten Queuezustand mit real laufendem Anbieter versöhnen; keine zweite Soloist-Instanz starten.
+Bewusste Connect-Übernahme, Rückkehr und Crash/Reboot behandeln. Gespeicherten Queuezustand mit real laufendem Anbieter versöhnen; keine zweite Anbieterinstanz starten.
 
 **Abnahme/Prüfung:** Moduswechsel erhält Queueposition gemäß Vertrag; Start nach Crash zwischen Speicherung/Audioausgabe erzeugt keine Doppelinstanz. Einschränkungen externer Übernahme im Einzeltrackmodus sichtbar.
 
 ## Spotify-Zugang und Bibliothek
 
-### S01 – Soloist-Kopplung und Ausgabebasis
+### S01 – ARMv6-Anbieterprobe und Ausgabebasis
 
 **Owner:** S / Luna high. **Vorgänger:** F03, A02; Gerätetest F04. **Bereich:** isolierte Anbieterprobe/Sessionverwaltung.
 
-Offiziellen Download, persönlichen Key, unterstützte Architektur und Pairing nachweisen. Gemeinsamen Audio-Stack mit lokalem Player testen; Secrets und Sitzungsdaten aus Git heraushalten.
+Soloist wegen fehlendem ARMv6-Build für die Zielbox ausschließen. Alternativen anhand gepinnter Quellen prüfen, danach passenden Build samt transitiven Bibliotheken und aktuelle Authentifizierung nachweisen. Gemeinsamen Audio-Stack mit lokalem Player testen; Secrets und Sitzungsdaten aus Git heraushalten. Das vorhandene librespot-Cross-Rezept ist nur ein Kandidat, kein Build-/Geräte-/Queuebeleg.
 
-**Abnahme/Prüfung:** Soloist allein spielt auf Pi, Session überlebt Neustart, fehlerhafter Key verständlich; kein Binary im Fork. Ablaufdatum für Updatepfad erfassen.
+**Abnahme/Prüfung:** Anbieter spielt einen gezielt gewählten Titel auf dem originalen Zero W, Stop ist bestätigt und Ereignisse korrelierbar; Authentifizierung und Neustart funktionieren ohne Secrets im Fork. CPU/RAM/Underruns und ARMv6-ABI erfassen. Geräteprobe bleibt vor vollständiger gemischter Runtimeintegration erforderlich.
 
 ### S02 – Web-API-OAuth
 
 **Owner:** S / Luna high. **Vorgänger:** A02; tatsächlicher HTTPS-Weg aus A01. **Bereich:** OAuth-/Tokenmodul und Callbacktests.
 
-PKCE/state, serverseitige Tokens, exakt registrierten Callback und erneutes Login implementieren. Von Soloist-Pairing unabhängig halten. Keine HTTP-.local-Lösung behaupten.
+PKCE/state, serverseitige Tokens, exakt registrierten Callback und erneutes Login implementieren. Von Wiedergabeauthentifizierung unabhängig halten. Keine HTTP-.local-Lösung behaupten.
 
 **Abnahme/Prüfung:** falsches state/Callback abweisen, Tokens weder Browserantwort noch Log; echtes Desktop-/Smartphone-Login mit vertrauenswürdigem HTTPS nachweisen.
 

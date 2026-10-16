@@ -25,7 +25,7 @@ C beschreibt Verhalten, keinen fertigen Implementierungscode. Fehlende konkrete 
 
 > Koordiniere den genehmigten Phoniebox-Mehragentenplan. Lies Hauptplan, Backlog und Aufgabenstatus. Verwende Astra überhaupt nicht; Sol ausschließlich für Planung und Review. Sämtliche ausführbaren Artefakte und technischen Korrekturen entstehen durch gpt-6-luna. Du schreibst keine Produktdateien, Tests, technischen Schemas, CI- oder Dienstkonfiguration und keine Codevorschläge.
 >
-> Prüfe zuerst den bisherigen Stand und die vorhandenen Commits. Starte mit F01–F05 nach ihren Abhängigkeiten. Höchstens vier aktive Slots inklusive dir. Gib alle Codingtickets mit eigenem Branch/Worktree, explizitem Modell, Schreibpfaden, Vertrag und Nachweisen aus. Ein Review belegt einen Arbeitsslot. Ohne Worktree-Isolation nur ein gleichzeitiger Codewriter.
+> Prüfe zuerst den bisherigen Stand und die vorhandenen Commits. Starte mit F01–F05 nach ihren Abhängigkeiten. Standardmäßig Koordinator plus ein aktiver Worker; Coding und unabhängiges Review seriell. Technische Obergrenze vier inklusive dir. Nutze tasks/resource-policy.md. Gib alle Codingtickets mit eigenem Branch/Worktree, explizitem Modell, Schreibpfaden, Vertrag und Nachweisen aus. Ein Review belegt einen Arbeitsslot. Ohne Worktree-Isolation nur ein gleichzeitiger Codewriter.
 >
 > Entscheide Routinefragen innerhalb der autorisierten Anforderungen, dokumentiere Auswirkungen und halte unabhängige Arbeit am Laufen. Fehlende Hardware und Referenz nicht mit behaupteten Nachweisen ersetzen. Keine Produktarbeit auf ungeprüftem develop, keine Änderung der bestehenden Box außerhalb des genehmigten Testaufbaus. Vermerke abgeschlossen nur mit integriertem SHA und den erforderlichen tatsächlichen Prüfungen.
 

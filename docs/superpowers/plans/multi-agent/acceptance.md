@@ -46,7 +46,7 @@ Für jeden Nachweis werden Ebene, getesteter Commit/Bundlestand, Ergebnis und of
 
 ## Hardwarevoraussetzungen und Zeitprotokoll
 
-Vor Hardwareabnahme sind Raspberry-Pi-Modell/Architektur, Bookworm-Abbild samt Prüfsumme, Phoniebox-Release samt vollständiger Commit-ID, Audioausgabe/-Stack, Reader/Tasten/GPIO, PiSugar-Modell/Firmware/Manager und Spotify-/Soloist-Version zu erfassen. Auf separater SD installieren; die Bestandskarte nicht überschreiben. Soloist nur offiziell beziehen und nicht im Fork verteilen. OAuth-Suche/Import und Soloist-Kopplung sind getrennte Prüfungen. GPIO-/I²C-Konflikte mit Reader oder Audio-HAT gezielt erfassen.
+Vor Hardwareabnahme sind Raspberry-Pi-Modell/Architektur, tatsächliches Raspberry-Pi-OS-Lite-32-Bit-Abbild samt Release und Prüfsumme, Phoniebox-Release samt vollständiger Commit-ID, Audioausgabe/-Stack, Reader/Tasten/GPIO, PiSugar-Modell/Firmware/Manager und Spotify-Anbieterversion samt ARMv6-ABI zu erfassen. Auf separater SD installieren; die Bestandskarte nicht überschreiben. Soloist nur offiziell beziehen und nicht im Fork verteilen. OAuth-Suche/Import und Soloist-Kopplung sind getrennte Prüfungen. GPIO-/I²C-Konflikte mit Reader oder Audio-HAT gezielt erfassen.
 
 Für jeden der zehn vorgesehenen Quellenwechsel mindestens protokollieren: Gerät/Softwarestände, Richtung (lokal→Spotify oder zurück), Anforderungszeit, bestätigter Stop, Startanforderung, erster hörbarer Ton, Erfolg/Fehler, Überlappung/Aussetzer und Logreferenz. Die Messmethode für „erster hörbarer Ton“ vorher festlegen, etwa Audioaufnahme mit Zeitbezug oder manuelle Beobachtung. Zusätzlich Wechselabbruch, Netzverlust und Neustart getrennt messen. Zeiten als Beobachtungen samt Verteilung und Durchlaufzahl berichten; keine unbelegte Millisekundenschwelle oder Leistungsgarantie ableiten.
 
@@ -62,8 +62,11 @@ Jedes Ticket hat genau einen Codeeigentümer. Koordinator editiert keine gemeins
 
 ## 4-Slot-Wellenbelegung
 
-Die verbindliche Wellenreihenfolge, Rollenverteilung und Review-Slot-Rotation stehen in Abschnitt 6 des [Hauptplans](../2026-10-16-phoniebox-multi-agent-plan.md). Dieser Abnahmeplan übernimmt dessen Höchstgrenze von vier aktiven Slots (Root/Koordinator plus höchstens drei Agents); ein Reviewer ersetzt einen Arbeitsslot. Sol kann Code lesen und reviewen, aber keine Patches liefern. Ausführbare Änderungen, technische Integration und Fixes erledigt Luna; Root führt nur mechanische Integrationsschritte aus. Pro Box, SD-Karte und Spotify-Session bleibt genau ein exklusiver Besitzer zuständig.
+Die verbindliche Wellenreihenfolge, Rollenverteilung und Review-Slot-Rotation stehen in Abschnitt 6 des [Hauptplans](../2026-10-16-phoniebox-multi-agent-plan.md). Dieser Abnahmeplan übernimmt dessen technische Höchstgrenze von vier aktiven Slots; der aktuelle Ressourcenmodus ist Root plus genau ein Worker mit serieller Reviewübergabe gemäß tasks/resource-policy.md. Sol kann Code lesen und reviewen, aber keine Patches liefern. Ausführbare Änderungen, technische Integration und Fixes erledigt Luna; Root führt nur mechanische Integrationsschritte aus. Pro Box, SD-Karte und Spotify-Session bleibt genau ein exklusiver Besitzer zuständig.
 
 ## Freigabekriterium
 
 Releasefreigabe setzt einen nachvollziehbaren Ziel-Commit samt passendem Bundle, frische Installation auf der festgelegten OS-/Pi-Konfiguration, gemischte Wiedergabe per Web/RFID/Tasten bei geschlossenem Browser, exklusive Quellenwechsel, PiSugar-Ausfallunterscheidung, Neustart/Netzverlust/Installer-Wiederaufnahme sowie Import und Rückweg auf separater SD voraus. Fehlende Konten oder Hardware lassen den zugehörigen Beleg offen; ein Mock ersetzt ihn nicht.
+
+
+Zielgerätepräzisierung: Original Zero W mit ARMv6 und PiSugar 2 (2 LEDs). Soloist hat keinen passenden Download und ist auf diesem Gerät ausgeschlossen. Frühere Soloist-Nennungen dieser Matrix beschreiben die ursprüngliche Anbieterannahme; ihre funktionalen Start-/Stop-/Auth-/Updateprüfungen gelten für den künftig belegten ARMv6-Anbieter. Ein erfolgreicher Bookworm-ARMv7-Container schließt keine Geräteabnahme. Siehe [Hardwareprofil](../../../../tasks/f04-hardware-profile.md).

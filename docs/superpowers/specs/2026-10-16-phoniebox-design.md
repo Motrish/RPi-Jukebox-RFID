@@ -1,12 +1,12 @@
 # Phoniebox: integrierte Oberfläche und Webinstallation
 
-Stand: 16.10.2026. Konzeptentwurf; keine Produktimplementierung oder Gerätetests.
+Stand: 16.10.2026. Zielkonzept; einzelne transportfreie Module sind inzwischen implementiert, der operative Nachweis steht in tasks/todo.md. Keine Gesamtimplementierung oder Gerätetests. Soloist-spezifische Kopplungs-/Updatehinweise unten gelten nur für künftig separat nachgewiesene passende Architekturen, nicht für den bestätigten ARMv6-Zero W.
 
 ## Ziel und Ausgangslage
 
 Ein echter Fork von MiczFlor/RPi-Jukebox-RFID erhält eine neue Weboberfläche, einen gemeinsamen Player für eigene Dateien und Spotify, PiSugar-Verwaltung und einen Webinstaller nach einmaligem Bootstrap. Musik läuft auf der Box weiter, wenn der Browser geschlossen wird. RFID, Tasten und Web bedienen denselben Player.
 
-Pi-Modell, OS, Phoniebox-Version und PiSugar-Modell sind noch unbekannt. Arbeitsannahme: Neuinstallation auf zweiter SD-Karte, danach Bestandsimport. Zunächst eine konkrete Bookworm-Konfiguration prüfen; keine Zusage für sämtliche alten Raspberry-Pi-Modelle.
+Ziel ist der ursprüngliche Raspberry Pi Zero W (ARMv6) mit Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs). OS-Release, Audioausgang, Bestandsversion und separate Test-SD bleiben offen. Neuinstallation und Import erst nach Sicherung auf einer geeigneten Testressource; ein Bookworm-ARMv7-Container ist kein ARMv6-Gerätenachweis. Siehe [Hardwareprofil](../../../tasks/f04-hardware-profile.md).
 
 Öffentliche Quellen wurden über Web gelesen. Lokales Klonen scheiterte am eingeschränkten Netzwerk; die lokale GitHub-Anmeldung ist ungültig. Genaue Code-Einhängepunkte sind am ausgewählten Release zu prüfen. Die Designgrafik war ebenfalls nicht abrufbar.
 
@@ -39,9 +39,9 @@ flowchart TD
     API --> Core[Phoniebox-Kern und gemeinsame Queue]
     RFID[RFID und Hardwaretasten] --> Core
     Core --> MPD[Lokaler MPD-Adapter]
-    Core --> Soloist[Spotify-Soloist-Adapter]
+    Core --> Spotify[ARMv6-Spotify-Adapter nach Nachweis]
     MPD --> Audio[Gemeinsame Audioausgabe]
-    Soloist --> Audio
+    Spotify --> Audio
     API --> Battery[PiSugar-Adapter]
     Battery --> Manager[Lokaler PiSugar-Dienst]
     API --> Setup[Installationsaufträge]
@@ -80,7 +80,7 @@ Einträge besitzen stabile ID, Quelle, Referenz und Reihenfolge. Laufende Queue 
 
 Der Koordinator verwaltet Reihenfolge, Pause, Vor/Zurück, Shuffle, Repeat, Resume und Lautstärkegrenze. RFID, GPIO und Web nutzen denselben Befehlspfad. Quellenwechsel: bisherigen Anbieter stoppen, Bestätigung abwarten, nächsten starten. Verspätete Ereignisse einer alten Sitzung dürfen keinen weiteren Wechsel auslösen. Stop, Skip, natürliches Ende und Fehler unterscheiden.
 
-Soloist im Einzeltrack-Modus ist der bevorzugte Kandidat. Er benötigt eine zuvor gekoppelte Sitzung und gibt über PulseAudio/PipeWire aus. Gemeinsame PulseAudio-Ausgabe mit MPD zuerst testen. Quelle: [Soloist CLI](https://developer.spotify.com/documentation/soloist/reference/command-line).
+Die frühere Soloist-Präferenz gilt für diese Zielbox nicht: Die offizielle Downloadmatrix enthält keinen ARMv6-Build. Ein alternatives Backend wird anhand aktueller Primärquellen und anschließend auf dem Zero W geprüft. Gemeinsame Ausgabe, kontrollierter Einzeltrackstart und bestätigter Stop sind Pflicht; ein Architekturtreffer alleine genügt nicht. Quelle: [Soloist-Downloads](https://developer.spotify.com/documentation/soloist/reference/downloads-and-updates).
 
 Nachzuweisen: Pause, Seek, Skip, Titelende, Übergangszeiten, Ausgabe, Lautstärkegrenze und Neustart. Prozessende alleine beweist kein natürliches Titelende. Keine Zusage für lückenlose Übergänge oder Crossfade zwischen Quellen.
 

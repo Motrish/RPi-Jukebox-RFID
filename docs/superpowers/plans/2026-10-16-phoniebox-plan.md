@@ -1,5 +1,7 @@
 # Phoniebox – Umsetzungsplan
 
+Ursprünglicher Etappenplan; maßgeblich sind inzwischen der Mehragentenplan und das Hardwareprofil: originaler Zero W ARMv6, Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs). Soloist-Nennungen dokumentieren die frühere Anbieterannahme und sind keine Freigabe für diese Box.
+
 > Für Umsetzung: executing-plans verwenden und jedes Arbeitspaket prüfen. Bei ausdrücklich gewünschter Delegation alternativ subagent-driven-development.
 
 **Ziel:** Nutzer-Fork mit neuer GUI, gemischten lokalen/Spotify-Playlists, PiSugar und Webinstallation.

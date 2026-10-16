@@ -6,7 +6,7 @@ Stand: 16.10.2026. Entwicklung durch den Nutzer gestartet; Ausführung beginnt m
 
 **Architektur:** Vorhandenen V3-Kern und React-Client erweitern. Ein zentraler Koordinator besitzt die Wiedergabe; lokale Musik und Spotify erhalten getrennte Adapter. GUI, API, PiSugar und Setup erscheinen unter einer Geräteadresse.
 
-**Technik:** Bestehendes Python/React/RPC, MPD, Soloist als zu prüfender Kandidat, gemeinsame Audioausgabe, SQLite für neue Playlistdaten, vorhandener Webserver und systemd.
+**Technik:** Bestehendes Python/React/RPC, MPD, ARMv6-taugliches Spotify-Backend nach eigener Prüfung, gemeinsame Audioausgabe, SQLite für neue Playlistdaten, vorhandener Webserver und systemd.
 
 **Grundlage:** [Konzept](../specs/2026-10-16-phoniebox-design.md), [bisheriger Etappenplan](2026-10-16-phoniebox-plan.md), [Integrationsrecherche](../../../integration-research.md).
 
@@ -35,7 +35,7 @@ Die aktuelle OpenAI-Dokumentation ordnet Luna fokussierten, häufigen Aufgaben u
 | R – unabhängiges Review | gpt-6.1-sol / high; xhigh für Playback/Installer/Abschluss | Anforderungen, Nebenläufigkeit, Sicherheit und Gesamtänderung prüfen; kein Code |
 | U – Weboberfläche | gpt-6-luna / high | Kleine React-Slices nach abgestimmtem Design; technische Theme-/UI-Dateien |
 | P – Player und Queue | gpt-6-luna / xhigh | Zustandsautomat, persistente Listen, Quellenwechsel; pro Ticket eine Invariante |
-| S – Spotify | gpt-6-luna / high | Soloist-Anbindung, später Web-API/OAuth; technische Risiken einzeln liefern |
+| S – Spotify | gpt-6-luna / high | ARMv6-Anbieterprüfung/-Anbindung, später Web-API/OAuth; technische Risiken einzeln liefern |
 | B – PiSugar | gpt-6-luna / high | Socket-Adapter, Fähigkeiten, Unterpfad-Anbindung |
 | I – Installation | gpt-6-luna / xhigh | Bootstrap, begrenzter Worker, Wiederaufnahme, Updates |
 | M – Migration | gpt-6-luna / high | Lesender V2-Import, Sicherung, Datenübernahme |
@@ -59,7 +59,7 @@ Für vollständige Runtimeintegration erforderlich:
 
 Fortsetzungsentscheidung am 16.10.2026: Transportfreie Verträge und Speicherung dürfen vor vollständigem G0 in isolierten GitHub-Branches entwickelt werden. Grundlage bleibt der vollständige, unveränderte V3-Dateibaum. Jeder Autor erhält einen eigenen lokalen Artefaktordner; dieser gilt ausdrücklich nicht als Repository-Checkout. Gezielte lokale Modulprüfungen und die vollständigen GitHub-Actions-Checkouts werden getrennt dokumentiert. Nur ein Owner schreibt je Datei. Runtimeintegration und Gerätefreigaben bleiben an ihre bisherigen Gates gebunden. Diese begrenzte Arbeitsweise nutzt den bestätigten Remote-Schreibweg, ohne den offenen lokalen Checkout als erledigt zu markieren.
 
-Hardware und Grafik bleiben offen: Pi-Modell, OS/Architektur, Reader, Tasten, DAC/HAT, PiSugar-Modell und Bestandsinstallation; Spotify-Konto/Key; sichtbare Dribbble-Grafik. Ohne Hardware sind Dokumentation, Verträge und Mocks möglich; Geräteabnahme bleibt offen. Ohne Grafik keine Behauptung einer vorlagengetreuen Gestaltung.
+Bestätigte Zielhardware: ursprünglicher Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs). Soloist besitzt keinen passenden ARMv6-Build und ist für diese Box ausgeschlossen; S01/P05 werden auf eine belegte Alternative angepasst. OS-Release, Reader, Tasten, Audioausgang, Bestandsinstallation, Spotify-Zugang und sichtbare Dribbble-Grafik bleiben offen. Maßgeblich ist das [Hardwareprofil](../../../tasks/f04-hardware-profile.md). Ohne Hardware sind Dokumentation, Verträge und Mocks möglich; Geräteabnahme bleibt offen. Ohne Grafik keine Behauptung einer vorlagengetreuen Gestaltung.
 
 ## 4. Schreibzuständigkeiten und Isolation
 
@@ -107,10 +107,10 @@ Regeln:
 - Eine Instanzsperre verhindert zwei aktive Controllerprozesse. Playerbefehle werden serialisiert. Sowohl vor einem asynchronen Anbieterstart als auch nach dessen Rückkehr prüfen, ob generation noch aktuell ist. Ein inzwischen gestoppter/übersprungener Start darf keinen Ton mehr erzeugen; ggf. diese alte Instanz wieder stoppen.
 - Titelende und Prozessende derselben Ausführung werden einmal verarbeitet. Stop, Skip, Fehler und natürliches Ende bleiben getrennte Ursachen.
 - Unbestätigter Stop blockiert den nächsten Anbieter. Bei Timeout sichtbarer Fehler statt Audioüberlagerung. Verbindungsabbruch ist keine Stopbestätigung.
-- MPD-Autoadvance und Soloist-Einzeltrackverhalten dürfen nicht zusätzlich zur zentralen Queue weiterschalten. Das gewählte Eigentumsmodell im Vertrag festhalten und real testen.
+- MPD-Autoadvance und Spotify-Einzeltrackverhalten dürfen nicht zusätzlich zur zentralen Queue weiterschalten. Das gewählte Eigentumsmodell im Vertrag festhalten und real testen.
 - Sämtliche direkten RFID-/GPIO-/RPC-/MPD-Steuerpfade inventarisieren und umleiten. Eine neue Oberfläche alleine übernimmt nicht die Playerhoheit.
 - Gespeicherte Playlistrevision, laufende Queuerevision und reine Positionsereignisse bleiben getrennt. Browser lädt zunächst einen vollständigen Snapshot mit Bootidentität; geordnete Events danach. Bei Lücken oder Wiederverbindung neuen Snapshot laden. UI-Zustand bleibt kein zweiter maßgeblicher Laufzustand.
-- Soloist-Sitzung und Web-API-OAuth separat behandeln. Lokale Wiedergabe bleibt bei API-Ausfall verfügbar. Kein browserabhängiges Abspielen.
+- Wiedergabesitzung und Web-API-OAuth separat behandeln. Lokale Wiedergabe bleibt bei API-Ausfall verfügbar. Kein browserabhängiges Abspielen.
 - PiSugar-Ausfall ergibt unbekannte Werte und gemeldete Nichterreichbarkeit. Abschalten bleibt im Systemdienst.
 - Installation ist wiederholbar und gegen parallele Änderungen gesperrt. Privilegierter Worker akzeptiert nur bekannte typisierte Schritte, kein freies Kommando.
 
@@ -118,19 +118,19 @@ Sol liefert dabei keine ausführbaren Schemas, Tests oder Implementierungen. API
 
 ## 6. Wellen und Slotbelegung
 
-Höchstens vier aktive Slots: C plus drei Arbeitsslots. Ein Review ersetzt einen Arbeitsslot. C zählt auch dann mit, wenn es koordiniert. Fertige Worker freigeben oder pausierte Rollen wiederverwenden; keine impliziten weiteren Unteragenten.
+Nutzervorgabe zum Fünf-Stunden-Kontingent: standardmäßig C plus genau ein aktiver Worker. Coding und unabhängiges Review laufen seriell. Die technische Obergrenze bleibt vier Slots inklusive C; sie ist kein Auftrag, alle Slots zu belegen. Die [Ressourcenregel](../../../tasks/resource-policy.md) bestimmt CI-Abfragen, Checkpoints und Wiederaufnahme. Ein Review ersetzt einen Arbeitsslot. C zählt auch dann mit, wenn es koordiniert. Fertige Worker freigeben oder pausierte Rollen wiederverwenden; keine impliziten weiteren Unteragenten.
 
 | Welle | Arbeitsslot 1 | Arbeitsslot 2 | Arbeitsslot 3 | Ergebnis |
 | --- | --- | --- | --- | --- |
 | W0 | X: Umgebung/Basis/Build | A: Bestand und Verträge | A/Q: Testvoraussetzungen und Referenzanalyse | G0, startfähige Basis |
-| W1 | S: Soloist-Probe | P: lokale Anbindung | U: Design/Shell, sobald Grafik sichtbar | G1, Playback machbar und Verträge stabil |
+| W1 | S: ARMv6-Anbieterprobe | P: lokale Anbindung | U: Design/Shell, sobald Grafik sichtbar | G1, Playback machbar und Verträge stabil |
 | W2 | P: Queue-Speicherung/-Ablauf plus P07a lokale Hardwarepfade | U: Bibliothek/grundlegende lokale Playeraktionen | B: PiSugar-Status | G2, lokale Musik durch neue Oberfläche |
 | W3 | P/X: gemischte Steuerung und P07b Quellenprüfung | S: OAuth/Katalog | I: Setupzugang/Aufträge | G3, gemischte Wiedergabe |
 | W4 | U: Playlist/Spotify/Power-Slices | B/X: PiSugar-Unterpfad | I: Hardware-/Plugin-Konfiguration | G4, integrierte Plugins |
 | W5 | I: Wiederaufnahme/Update | M: V2-Import | Q: unabhängige Browser-/Fehlerprüfungen | G5, installierbarer Kandidat |
 | W6 | P/Q: Playback-Hardwaretest | U/Q: Browser und Nachweise ohne Boxänderung | I/Q: frische Installation auf separater Ressource, sonst warten | G6, Releaseabnahme |
 
-Innerhalb jeder Welle haben Backlog-Abhängigkeiten Vorrang. Die Tabelle ist kein Auftrag, abhängige Tickets zugleich zu starten. Während ein Review läuft, bestehen z. B. C + Luna-P + Luna-U + Sol-R; ein dritter Coding-Agent kommt erst nach Freigabe eines Slots hinzu. Normalbetrieb: C plus zwei Luna-Coder und ein unabhängiger Sol-Reviewer. Ein dritter Luna-Coder nutzt den Reviewslot nur, solange kein Review ansteht. Große Reviews übergreifend, kleine Reviews direkt nach jedem Ticket.
+Innerhalb jeder Welle haben Backlog-Abhängigkeiten Vorrang. Die Tabelle ist kein Auftrag, abhängige Tickets zugleich zu starten. Während ein Review läuft, bestehen z. B. C + Luna-P + Luna-U + Sol-R; ein dritter Coding-Agent kommt erst nach Freigabe eines Slots hinzu. Aktueller Normalbetrieb: C plus ein Luna-Worker, danach ein unabhängiger Sol-Reviewer an dessen Stelle. Zusätzliche Parallelität setzt eine begründete Ressourcenentscheidung voraus. Große Reviews übergreifend, kleine Reviews direkt nach jedem Ticket.
 
 W0 korrigiert den alten Plan: Fork besteht bereits; V3-Basis und Build werden früh vorbereitet, statt hinter dem Spotify-Versuch zu warten. Hardwareversuch blockiert die vollständige gemischte Implementierung, nicht alle Dokumentations-/UI-/Vertragsarbeit.
 

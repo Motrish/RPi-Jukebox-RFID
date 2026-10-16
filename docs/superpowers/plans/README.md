@@ -25,3 +25,9 @@ Der geprüfte transportfreie Daten-/Speicherkern liegt auf [future3/modern-ui](h
 - [P03a2-Playlistaktionen](../../../tasks/p03a2-playlist-report.md) und [Review](../../../tasks/p03a2-review.md)
 - [P03b-Queues](../../../tasks/p03b-queue-report.md) und [Review](../../../tasks/p03b-review.md)
 - [Unabhängige Storeproben](../../../tasks/q01-store-regressions-report.md) und [Review](../../../tasks/q01-store-review.md)
+
+- [Zielgerät Zero W / ARMv6](../../../tasks/f04-hardware-profile.md)
+- [Ressourcen- und Wiederaufnahmeregeln](../../../tasks/resource-policy.md)
+- [ARMv6-Spotify-Optionen und offene Nachweise](../../../tasks/armv6-spotify-options.md)
+- [B01a-PiSugar-Vertrag](../../../tasks/b01-pisugar-contract.md) und [Review](../../../tasks/b01-pisugar-review.md)
+- [P01a1-Providervertrag](../../../tasks/p01-local-provider-contract.md)
