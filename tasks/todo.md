@@ -10,7 +10,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | --- | --- | --- | --- |
 | F01 | Git- und Testumgebung verfügbar machen | blocked | API-Schreiben/Zurücklesen bestätigt; lokaler Checkout/Worktrees weiterhin gesperrt |
 | F02 | Vollständige V3-Basis im Fork | implemented | feature/foundation = 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Remotehistorie geprüft, lokaler Nachweis offen |
-| F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild erfolgreich; Python/Installations-CI läuft; Quellen-Teilbericht vorhanden |
+| F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild und Python-CI erfolgreich; Installations-CI läuft; Quellen-Teilbericht vorhanden |
 | F04 | Zielgerät und Testressourcen festhalten | blocked | Geräteangaben asynchron angefragt; unabhängige Arbeit läuft |
 | F05 | Designreferenz verfügbar machen | blocked | Abruf erneut fehlgeschlagen; tasks/f05-design-report.md |
 | A01 | Verbindliche Prosa-Verträge | planned | Noch keine Produktumsetzung |
@@ -87,6 +87,6 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 - Dokumentationsbranch docs/development-plan und Draft-PR 1 veröffentlicht; neun Dateien unverändert zurückgelesen.
 - feature/foundation enthält die unveränderte V3-Releasebasis; develop blieb unverändert.
 - future3/ci-baseline bei 58826fcf880f521292c56c43b682fa67cfdc2418 hat exakt den Upstream-V3-Dateibaum; vorhandene CI wurde dadurch ausgelöst.
-- V3-Webbuild und V3-Markdown sind erfolgreich; Python-/Installerresultate zum Zeitpunkt dieses Status noch offen.
+- V3-Webbuild, Pythonmatrix und V3-Markdown sind erfolgreich; Installerresultate zum Zeitpunkt dieses Status noch offen.
 - Dokumentationsformat korrigiert, um den fehlgeschlagenen Markdowncheck des Plan-PRs zu beheben.
-- Beide aktiven Subagenten meldeten das Nutzungslimit, Wiederverfügbarkeit laut Meldung 23:06 Uhr. Coding bleibt Luna zugeordnet; keine Astra-/Sol-Coding-Ersatzroute.
+- Beide aktiven Subagenten meldeten das Nutzungslimit, Die Limitmeldung nennt 11:06 PM als nächsten Versuch; Clientzeit ist maßgeblich. Coding bleibt Luna zugeordnet; keine Astra-/Sol-Coding-Ersatzroute.
