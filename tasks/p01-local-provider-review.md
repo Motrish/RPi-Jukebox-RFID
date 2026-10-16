@@ -10,7 +10,7 @@ Alle vier veröffentlichten Dateien wurden am unveränderlichen Commit über den
 
 | Datei | Veröffentlichter und normalisiert lokal errechneter Git-Blob |
 | --- | --- |
-| src/jukebox/components/local_provider/__init__.py | 0d685fca09d8611b2a56852b788694262e47c75a |
+| `src/jukebox/components/local_provider/__init__.py` | 0d685fca09d8611b2a56852b788694262e47c75a |
 | src/jukebox/components/local_provider/adapter.py | f5e9416e59dfea75585495b27b1d4c500e21af7d |
 | test/local_provider/test_adapter.py | 289fa6dc6ea3b08992ae780a84175031725ea884 |
 | test/local_provider/fixtures/v1.json | 283e36532dc8576d9b797a16803af30de7ac068a |
