@@ -1,0 +1,37 @@
+{
+  "contractVersion": 1,
+  "mediaRef": {
+    "kind": "LOCAL",
+    "libraryId": "synthetic_track_01"
+  },
+  "identity": {
+    "bootId": "boot_q01",
+    "generation": 7,
+    "executionId": "execution_q01",
+    "entryId": "entry_q01"
+  },
+  "resolvedMedia": {
+    "libraryId": "synthetic_track_01",
+    "mpdReference": "albums/demo/track-01.mp3"
+  },
+  "initialStatus": {
+    "state": "stop",
+    "songid": null,
+    "playlistlength": 0,
+    "repeat": 0,
+    "random": 0,
+    "single": 0,
+    "consume": 0,
+    "elapsed": null,
+    "duration": null,
+    "hasError": false
+  },
+  "capabilities": {
+    "canPause": true,
+    "canResume": true,
+    "canSeek": true,
+    "canConfirmStop": true,
+    "canIdentifyNaturalEnd": false
+  }
+}
+
