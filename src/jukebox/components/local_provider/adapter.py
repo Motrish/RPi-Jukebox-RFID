@@ -142,9 +142,8 @@ class LocalProvider:
                 evidence = self._status(context, "SEEK", identity, guard, expiry, epoch)
                 if evidence["songid"] != songid or evidence["state"] != previous_state or evidence["hasError"]:
                     raise _ProviderFault("PROVIDER_STATE_MISMATCH", effect=True)
-                self._confirmed(guard, identity, "SEEK", expiry, context, epoch)
-                self._uncertain = False
-                return _receipt("SEEK", identity, "CONFIRMED", epoch, evidence)
+            self._uncertain = False
+            return _receipt("SEEK", identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             return self._failure("SEEK", identity, fault, epoch, evidence)
         except Exception:
@@ -161,6 +160,7 @@ class LocalProvider:
             self._require_owned(identity, "STOP", allow_stopped=True)
             if not self._capabilities["canConfirmStop"]:
                 raise _ProviderFault("CAPABILITY_UNAVAILABLE")
+            self._confirmed_stopped = False
             with self._session("STOP", identity, guard, expiry, self._epoch) as (context, epoch):
                 evidence = self._status(context, "STOP", identity, guard, expiry, epoch)
                 if evidence["hasError"]:
@@ -175,10 +175,9 @@ class LocalProvider:
                     evidence = self._status(context, "STOP", identity, guard, expiry, epoch)
                     if evidence["state"] != "stop" or evidence["hasError"]:
                         raise _ProviderFault("STOP_UNCONFIRMED", effect=True)
-                self._confirmed(guard, identity, "STOP", expiry, context, epoch)
-                self._uncertain = False
-                self._confirmed_stopped = True
-                return _receipt("STOP", identity, "CONFIRMED", epoch, evidence)
+            self._uncertain = False
+            self._confirmed_stopped = True
+            return _receipt("STOP", identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             return self._failure("STOP", identity, fault, epoch, evidence)
         except Exception:
@@ -200,8 +199,7 @@ class LocalProvider:
                 if evidence["state"] in {"play", "pause"}:
                     if self._songid is None or evidence["songid"] != self._songid:
                         raise _ProviderFault("PROVIDER_STATE_MISMATCH")
-                self._confirmed(guard, identity, "OBSERVE", expiry, context, epoch)
-                return _receipt("OBSERVE", identity, "CONFIRMED", epoch, evidence)
+            return _receipt("OBSERVE", identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             return self._failure("OBSERVE", identity, fault, epoch, evidence)
         except Exception:
@@ -230,9 +228,8 @@ class LocalProvider:
                     evidence = self._status(context, operation, identity, guard, expiry, epoch)
                     if evidence["state"] != target_state or evidence["songid"] != self._songid or evidence["hasError"]:
                         raise _ProviderFault("PROVIDER_STATE_MISMATCH", effect=True)
-                self._confirmed(guard, identity, operation, expiry, context, epoch)
-                self._uncertain = False
-                return _receipt(operation, identity, "CONFIRMED", epoch, evidence)
+            self._uncertain = False
+            return _receipt(operation, identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             return self._failure(operation, identity, fault, epoch, evidence)
         except Exception:
@@ -251,9 +248,8 @@ class LocalProvider:
                 evidence = self._status(context, "START", identity, guard, deadline, epoch)
                 if not self._is_started(evidence, self._songid, allow_paused=True):
                     raise _ProviderFault("PROVIDER_STATE_MISMATCH", effect=self._uncertain)
-                self._confirmed(guard, identity, "START", deadline, context, epoch)
-                self._uncertain = False
-                return _receipt("START", identity, "CONFIRMED", epoch, evidence)
+            self._uncertain = False
+            return _receipt("START", identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             return self._failure("START", identity, fault, epoch, evidence)
         except Exception:
@@ -326,9 +322,8 @@ class LocalProvider:
                 evidence = self._status(context, "START", identity, guard, deadline, epoch)
                 if not self._is_started(evidence, songid):
                     raise _ProviderFault("PROVIDER_STATE_MISMATCH", effect=True)
-                self._confirmed(guard, identity, "START", deadline, context, epoch)
-                self._uncertain = False
-                return _receipt("START", identity, "CONFIRMED", epoch, evidence)
+            self._uncertain = False
+            return _receipt("START", identity, "CONFIRMED", epoch, evidence)
         except _ProviderFault as fault:
             self._restore_unmutated_start(fault, previous)
             return self._failure("START", identity, fault, epoch, evidence)
@@ -347,6 +342,7 @@ class LocalProvider:
                 if expected_epoch is not None and epoch != expected_epoch:
                     raise _epoch_fault(operation)
                 yield context, epoch
+            self._confirmed(guard, identity, operation, deadline, context, epoch)
         except _ProviderFault:
             raise
         except SessionFailure as failure:
