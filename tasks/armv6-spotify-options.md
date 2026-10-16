@@ -44,4 +44,3 @@ Ein bestandener Cross-Build allein reicht nicht. Offen bleiben reale Laufzeit- u
 ## Quellen und Umfang
 
 Es wurden die oben verlinkten, gepinnten Upstream-Dateien von Mopidy-Spotify, librespot und Raspotify geprüft; keine Installation, Builds, Gerätezugriffe oder Authentifizierung wurden ausgeführt. Die ursprüngliche Raspotify-Abfrage unter `dani-garcia/raspotify` lieferte 404; das Repository-Suchresultat führte zum offiziellen `dtcooper/raspotify`, dessen README dann am vorgegebenen Commit gelesen wurde. Das Cross-Build-Rezept ist nur eine Quellkonfiguration und kein ausgeführter Build oder Raspbian-ABI-Nachweis.
-

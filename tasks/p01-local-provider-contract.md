@@ -8,7 +8,7 @@ Quellbasis: V3.6.0 `4fa84fd50750fd4b52984d51aa7c95466cf5b241`, insbesondere `src
 
 | Bestehender Einstieg | Tatsächliches Verhalten | Konsequenz für die Grenze |
 | --- | --- | --- |
-| PlayerMPD.__init__, connect | Erzeugt MPDClient, verbindet mit Host/6600, setzt timeout und idletimeout auf None und startet 250-ms-Poller. Initialisierung kann eine vorhandene Queue löschen. | Keine zweite PlayerMPD-Instanz zur Adaptererzeugung. Ein Import-/Fakekonstruktor darf keinen Client, Timer oder Dienst starten. |
+| `PlayerMPD.__init__`, connect | Erzeugt MPDClient, verbindet mit Host/6600, setzt timeout und idletimeout auf None und startet 250-ms-Poller. Initialisierung kann eine vorhandene Queue löschen. | Keine zweite PlayerMPD-Instanz zur Adaptererzeugung. Ein Import-/Fakekonstruktor darf keinen Client, Timer oder Dienst starten. |
 | MpdLock | Reentrant-Lock um denselben Client; Eintritt versucht connect, ConnectionError wird abgefangen. | Bestehende Sperre teilen. Verbindungswechsel muss künftig sichtbar sein; stilles Reconnect ist kein Ausführungsnachweis. |
 | play_single | Unter Sperre clear, addid, play; Rückgabe von addid wird verworfen. | Für eine korrelierte Ausführung braucht die interne Bindung die tatsächliche MPD-ID und bewusst gesetzte Optionen. Name play_single allein garantiert keinen abgesicherten Einzeltrackmodus. |
 | play_folder / play_album | Befüllt mehrere MPD-Einträge und startet die MPD-Queue. | Nicht als Providerstart einer zentralen Einzelausführung verwenden. |
@@ -128,9 +128,6 @@ Luna soll nach ausdrücklicher Freigabe unter anderem beweisen: keine Konstrukti
 Vor realer Bindung bleiben echte LibraryId-Auflösung, normalisierte frische Session, tatsächlich begrenzte Socket-/Lock-/Resolverwartezeit, Reconnectidentität und exklusiver X-Anschluss an genau den vorhandenen MPDClient offen. Die gepinnte MpdLock-/timeout-None-Situation wird hier nicht als bereits passend ausgegeben. Externe MPD-/RFID-/GPIO-/Web-/Timer-/Jingle-/Sprachschreiber sind noch nicht umgeleitet. Physische Audio-Stille, Seek-/Pausefähigkeiten, Endeerkennung, Neustart-State und zehn gemessene Quellenwechsel erfordern Zielgerät/P02/P04/P07. Fakekonformität schließt weder G1/G2 noch Runtime-/Hardwareabnahme.
 
 Root muss die vier Dateien, Namen und diese injizierten Formen zuerst im engen Luna-Briefing freigeben. Dieses Dokument allein autorisiert keine technische Gateway-/Providerimplementierung oder Änderung bestehender Dienste.
-
-
-
 
 ## Root-Freigabe P01a1
 

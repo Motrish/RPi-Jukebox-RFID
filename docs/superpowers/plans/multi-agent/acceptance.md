@@ -68,5 +68,4 @@ Die verbindliche Wellenreihenfolge, Rollenverteilung und Review-Slot-Rotation st
 
 Releasefreigabe setzt einen nachvollziehbaren Ziel-Commit samt passendem Bundle, frische Installation auf der festgelegten OS-/Pi-Konfiguration, gemischte Wiedergabe per Web/RFID/Tasten bei geschlossenem Browser, exklusive Quellenwechsel, PiSugar-Ausfallunterscheidung, Neustart/Netzverlust/Installer-Wiederaufnahme sowie Import und Rückweg auf separater SD voraus. Fehlende Konten oder Hardware lassen den zugehörigen Beleg offen; ein Mock ersetzt ihn nicht.
 
-
 Zielgerätepräzisierung: Original Zero W mit ARMv6 und PiSugar 2 (2 LEDs). Soloist hat keinen passenden Download und ist auf diesem Gerät ausgeschlossen. Frühere Soloist-Nennungen dieser Matrix beschreiben die ursprüngliche Anbieterannahme; ihre funktionalen Start-/Stop-/Auth-/Updateprüfungen gelten für den künftig belegten ARMv6-Anbieter. Ein erfolgreicher Bookworm-ARMv7-Container schließt keine Geräteabnahme. Siehe [Hardwareprofil](../../../../tasks/f04-hardware-profile.md).

@@ -55,8 +55,8 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 - Git-CLI-Netzwerkzugriff ist aktuell blockiert; F01 benötigt einen zulässigen ausführbaren Entwicklungsarbeitsplatz.
 - V3-Objekte sind erreichbar; feature/foundation und future3/modern-ui bestehen. develop bleibt unverändert.
-- Connector-Schreibweg einschließlich Workflowdatei durch Commit/Ref/Datei-Zurücklesen bestätigt; CI-Korrektur 83b0c01 liegt in Draft-PR 2, Review und Runnerabschluss offen.
-- Zielgerät, OS-Abbild, PiSugar-Modell, Audio/Reader und Spotify-Zugang noch nicht erfasst.
+- Connector-Schreibweg einschließlich Workflowdatei bestätigt; CI-Korrektur 83b0c01 nach Review und Bookworm-Runnererfolg als b2be3f3 integriert.
+- Zero W ARMv6, Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs) bestätigt; exaktes OS-Abbild/Release, Audio/Reader, Test-SD und Spotify-Zugang offen.
 - Referenzgrafik bislang nicht abrufbar; F05 offen.
 
 ## Ressourcenregister
@@ -147,7 +147,6 @@ Der Nutzer bestätigt den ursprünglichen Raspberry Pi Zero W, Raspberry Pi OS L
 Nutzervorgabe zum Fünf-Stunden-Kontingent ist in resource-policy.md festgehalten: standardmäßig C plus ein Worker, serielle Reviews, gezielte CI-Abfragen und dauerhafte Checkpoints. Kein verlässlicher Quotenleser und keine bestätigte Resume-Automation verfügbar; eine automatische Wiederaufnahme wird nicht behauptet. Bestehende Modellverbote bleiben unverändert.
 
 Q01-Storeproben bestanden inzwischen die komplette Pythonmatrix einschließlich finish im Lauf 38963718947 und wurden nach unabhängigem Review als caa8ca919c86e242ab79e0813cc3d2d1622f1a70 integriert. Zusammen sind 60 neue gezielte Tests vorhanden; umfassendes Q01 für weitere Features bleibt offen.
-
 
 ### Checkpoint nach Zielgerätebestätigung
 

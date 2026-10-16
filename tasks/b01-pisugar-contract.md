@@ -18,10 +18,10 @@ Die offizielle [PiSugar Power Manager Dokumentation](https://docs.pisugar.com/do
 | --- | --- | --- |
 | `get model` | `model: PiSugar 2` | Modell feststellen; streng gegen bekannte Namen prüfen |
 | `get battery` | `battery: [number]` | Prozent; nur endliche Zahl 0–100 akzeptieren |
-| `get battery_charging` | `battery_charging: [true|false]` | dokumentiert mit Hinweis, für neue Modelle stattdessen die zwei folgenden Werte zu verwenden |
-| `get battery_power_plugged` | `battery_power_plugged: [true|false]` | laut Doku nur neues Modell |
-| `get battery_allow_charging` | `battery_allow_charging: [true|false]` | laut Doku nur neues Modell |
-| `get battery_led_amount` | `battery_led_amount: [2|4]` | Doku erklärt 2 LEDs als neues PiSugar-2-Modell; kein hinreichender Beleg für universelle Capability-Inferenz |
+| `get battery_charging` | `battery_charging: [true\|false]` | dokumentiert mit Hinweis, für neue Modelle stattdessen die zwei folgenden Werte zu verwenden |
+| `get battery_power_plugged` | `battery_power_plugged: [true\|false]` | laut Doku nur neues Modell |
+| `get battery_allow_charging` | `battery_allow_charging: [true\|false]` | laut Doku nur neues Modell |
+| `get battery_led_amount` | `battery_led_amount: [2\|4]` | Doku erklärt 2 LEDs als neues PiSugar-2-Modell; kein hinreichender Beleg für universelle Capability-Inferenz |
 
 Die [offizielle Rust-Implementierung](https://github.com/PiSugar/pisugar-power-manager-rs/tree/ea025c2d3d261427206ae1a2e9b8f853c2b3af12) bestätigt die Standard-UDS-Adresse im README und die Antworten im `pisugar-server/src/cmds.rs`: `get <name>` antwortet als `<name>: <Wert>`, Fehler als Text. `pisugar-server/src/stream.rs` verarbeitet Requests zeilenweise und schreibt eine Antwort pro Zeile. Der Server hat zusätzlich einen Eventkanal, der Statusantworten ungefragt in dieselbe Verbindung schreiben kann. Deshalb sollte der Adapter pro Befehl eine frische UDS-Verbindung öffnen, genau eine Kommandozeile senden und die erste begrenzte Antwortzeile lesen, statt eine dauerhafte Verbindung oder ein frei wiederverwendbares Kommandointerface anzubieten. Der dokumentierte und implementierte Server hat sowohl Standard-Streammodus als auch optionalen Strict-Modus; an der Zielinstallation ist deren Konfiguration noch nicht bekannt. Das Verhalten mit realer Installation muss F04 prüfen.
 
@@ -51,10 +51,6 @@ Die Unit-Tests prüfen alle vier bekannten Modellnamen, Prozent 0/100/Dezimalwer
 
 Als Zielgerät wurden durch Root ein ursprünglicher Raspberry Pi Zero W (ARMv6), Raspberry Pi OS Lite 32-bit und PiSugar 2 (2-LED) bestätigt. Diese Angaben sind noch kein Live-Hardwaretest. Offen bis F04 bleiben installierte PiSugar-Version/Firmware, tatsächlicher Socketpfad/Dateirechte, Manager-Version und Strict-Modus, reale Response-Varianten/Zeilenenden, Netzteilwechsel unter Last und Verhalten bei laufendem Manager-Neustart. Der Reader setzt `charging=null` und `capabilities=[]` für alle Modelle, bis dafür ein eigener Modellprofil-Scope freigegeben wird. Das 5-Sekunden-Polling und ein maximal 60-Sekunden-Fehlerbackoff gehören zum späteren Consumer, nicht in diesen Reader. Die offizielle Doku und der geprüfte Rust-Quellstand `ea025c2d3d261427206ae1a2e9b8f853c2b3af12` belegen den veröffentlichten Protokollvertrag, aber nicht die Installation auf der Zielbox.
 
-
-
-
-
 ## B01a implementierter Stage-Slice
 
 Root hat B01a eng auf genau drei Dateien freigegeben, Stage-Basis `b2be3f39f54d8f492966a407c3b7293d1311e1fa` und Arbeitsverzeichnis `G:/Entwicklung/phoniebox-staging/b01`. Im Stage liegen `src/jukebox/components/pisugar/manager.py`, `src/jukebox/components/pisugar/__init__.py` und `test/pisugar/test_manager.py`. Es wurde kein Branch und kein Remote-Commit angelegt; Root publiziert nach Übergabe. Der Reader nutzt ausschließlich `AF_UNIX`, eine frische Verbindung je festem Befehl, und sendet nur `get model` sowie `get battery`. `enabled=False` ist Standard und öffnet keinen Socket. `charging` und `capabilities` bleiben immer null bzw. leer. Jeder Befehl hat höchstens eine Sekunde Deadline über Connect/Senden/Empfangen; Parser und Socketfehler ergeben stabile, pfad- und rohtextfreie Fehlercodes. Unbekannte Modellnamen liefern den ausdrücklich freigegebenen UNKNOWN-Snapshot (Modell/Messwerte/Zeitstempel null, `UNSUPPORTED_MODEL`).
@@ -70,6 +66,5 @@ Frische Grünverifikation im Stage:
 - `python -m py_compile src/jukebox/components/pisugar/manager.py src/jukebox/components/pisugar/__init__.py test/pisugar/test_manager.py` — Exit 0.
 
 Die 20 gezielten Unittests decken die vier Quellmodellnamen, Status mit 0/100/Dezimalwert, disabled-by-default ohne Socket, nur die zwei freigegebenen Befehle, unbekanntes Modell, Socket-/Berechtigungs-/Timeoutfehler, fehlenden Zeilenabschluss, ungültige Kodierung, falsches Präfix, eine unerwartete Zeile vor der Antwort (Fehler) und Eventdaten nach der erwarteten LF-Zeile im selben recv (Erfolg mit anschließendem Socketclose), Antwortgrenze, NaN/Infinity/Underscore-/Rangefehler, tröpfelnde und vollständige aber verspätete Antworten mit absoluter Deadline sowie fehlgeschlagenen zweiten Read ohne Teilmessung ab. Die Tests verwenden Fake-Sockets; sie beweisen weder reale UDS-Rechte noch Verhalten mit PiSugar-Hardware. Der volle Repository-Testlauf und CI bleiben bis zur Veröffentlichung/Integration Root-Aufgabe; F04-Hardwareprüfung bleibt offen.
-
 
 Veröffentlichungscheckpoint: B01a bei fb2a7d0d5388b775ffa369c0eeed920509d407d6 unabhängig reviewed; Python 3.9–3.13 und finish in 38966180905 erfolgreich. PR 8 als 5057f0b60c4e85f595fd09450be8341f1f377c48 in future3/modern-ui integriert. Die erste gültige LF-Antwort ist maßgeblich; nachfolgende Eventbytes werden ignoriert und die Verbindung geschlossen, vorhergehende falsche Prefixzeilen sind Fehler. Pro Befehl gilt ein eigenes Budget bis einer Sekunde; zwei Reads können zusammen zwei Budgets benötigen. Keine Hardware-/Runtime-/Gesamt-B01-Freigabe.
