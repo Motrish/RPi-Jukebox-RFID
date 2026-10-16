@@ -9,25 +9,23 @@ ignore =
     E128,
     # line break before binary operator
     W503,
-    # We don't always want periods at the end of the first docstring line
-    D400,
-    # We dont rephrase to imperative mood
-    D401
+    # global name / nonlocal name is unused: name is never assigned in scope
+    F824
 per-file-ignores =
     # Only in __init__files ignore imported but unused
     # Not necessary, if __all__ is declared in __init__ file
     # https://www.python.org/dev/peps/pep-0008/#id48
-    __init__.py:F401,
-    components/smart-home-automation/MQTT-protocol/daemon_mqtt_client.py:W605,
-    components/controls/buttons_usb_encoder/*.py:E402
+    __init__.py:F401
 count = True
 max-complexity = 12
 statistics = True
-show-source = True
-filename = *.py,*.py.*
+filename = *.py
 extend-exclude =
-    # Ignore dirs and files, which are from external sources
-    components/displays/HD44780-i2c/
-    scripts/Reader.py.pcsc
-    # Ignore helper scripts
-    scripts/helperscripts/
+    # Ignore all scratch development directories
+    scratch*,
+    # Ignore dirs and files that have not been ported yet
+    */jukebox/NvManager.py
+    # ignore Python venv's
+    .venv/*
+    # ignore node modules
+    */node_modules/*
