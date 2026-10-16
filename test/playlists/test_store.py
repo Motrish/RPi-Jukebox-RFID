@@ -38,6 +38,35 @@ def append(command_id, playlist_id, revision, items):
     }
 
 
+def rename(command_id, playlist_id, revision, name):
+    return {
+        "contractVersion": 1, "commandId": command_id, "action": "PLAYLIST_RENAME",
+        "playlistId": playlist_id, "expectedRevision": revision, "name": name,
+    }
+
+
+def remove(command_id, playlist_id, revision, entry_id):
+    return {
+        "contractVersion": 1, "commandId": command_id, "action": "PLAYLIST_REMOVE",
+        "playlistId": playlist_id, "expectedRevision": revision, "entryId": entry_id,
+    }
+
+
+def move(command_id, playlist_id, revision, entry_id, to_position):
+    return {
+        "contractVersion": 1, "commandId": command_id, "action": "PLAYLIST_MOVE",
+        "playlistId": playlist_id, "expectedRevision": revision,
+        "entryId": entry_id, "toPosition": to_position,
+    }
+
+
+def delete(command_id, playlist_id, revision):
+    return {
+        "contractVersion": 1, "commandId": command_id, "action": "PLAYLIST_DELETE",
+        "playlistId": playlist_id, "expectedRevision": revision,
+    }
+
+
 class PlaylistStoreTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -45,6 +74,161 @@ class PlaylistStoreTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_rename_and_noop_rename_preserve_command_results_and_revision_rules(self):
+        created = self.store.execute(create(items=[]))
+        playlist_id = created["result"]["playlist"]["playlistId"]
+
+        changed = self.store.execute(rename("cmd_rename", playlist_id, 0, "Changed"))
+        snapshot = changed["result"]["playlist"]
+        self.assertEqual("Changed", snapshot["name"])
+        self.assertEqual(1, snapshot["revision"])
+        self.assertEqual(changed, self.store.get_command("cmd_rename"))
+
+        unchanged = self.store.execute(rename("cmd_rename_noop", playlist_id, 1, "Changed"))
+        self.assertEqual("APPLIED", unchanged["status"])
+        self.assertEqual(1, unchanged["result"]["playlist"]["revision"])
+        self.assertEqual(unchanged, self.store.execute(rename("cmd_rename_noop", playlist_id, 1, "Changed")))
+
+    def test_remove_one_duplicate_occurrence_and_normalize_middle_positions(self):
+        items = [{"mediaRef": LOCAL, "title": title} for title in ("Same", "Middle", "Same", "Last")]
+        created = self.store.execute(create(items=items))
+        snapshot = created["result"]["playlist"]
+        entries = snapshot["entries"]
+
+        removed = self.store.execute(remove("cmd_remove", snapshot["playlistId"], 0, entries[2]["entryId"]))
+        updated = removed["result"]["playlist"]
+        self.assertEqual(1, updated["revision"])
+        self.assertEqual([entries[0]["entryId"], entries[1]["entryId"], entries[3]["entryId"]],
+                         [entry["entryId"] for entry in updated["entries"]])
+        self.assertEqual([0, 1, 2], [entry["position"] for entry in updated["entries"]])
+        self.assertEqual(updated, self.store.get_playlist(snapshot["playlistId"]))
+        self.assertEqual(removed, self.store.get_command("cmd_remove"))
+
+        missing = self.store.execute(remove("cmd_remove_missing", snapshot["playlistId"], 1, entries[2]["entryId"]))
+        self.assertEqual("REJECTED", missing["status"])
+        self.assertEqual("NOT_FOUND", missing["error"]["code"])
+        self.assertEqual(missing, self.store.execute(remove(
+            "cmd_remove_missing", snapshot["playlistId"], 1, entries[2]["entryId"]
+        )))
+
+    def test_move_both_directions_noop_and_out_of_range_with_unique_positions(self):
+        created = self.store.execute(create(items=[
+            {"mediaRef": LOCAL, "title": title} for title in ("A", "B", "C")
+        ]))
+        snapshot = created["result"]["playlist"]
+        playlist_id = snapshot["playlistId"]
+        ids = [entry["entryId"] for entry in snapshot["entries"]]
+
+        moved_to_end = self.store.execute(move("cmd_move_end", playlist_id, 0, ids[0], 2))
+        moved_end_ids = [entry["entryId"] for entry in moved_to_end["result"]["playlist"]["entries"]]
+        self.assertEqual([ids[1], ids[2], ids[0]], moved_end_ids)
+        self.assertEqual([0, 1, 2], [entry["position"] for entry in moved_to_end["result"]["playlist"]["entries"]])
+
+        moved_to_start = self.store.execute(move("cmd_move_start", playlist_id, 1, ids[0], 0))
+        moved_start_ids = [entry["entryId"] for entry in moved_to_start["result"]["playlist"]["entries"]]
+        self.assertEqual([ids[0], ids[1], ids[2]], moved_start_ids)
+        self.assertEqual(2, moved_to_start["result"]["playlist"]["revision"])
+
+        noop = self.store.execute(move("cmd_move_noop", playlist_id, 2, ids[0], 0))
+        self.assertEqual(2, noop["result"]["playlist"]["revision"])
+        self.assertEqual(moved_to_start["result"]["playlist"], noop["result"]["playlist"])
+
+        out_of_range = self.store.execute(move("cmd_move_range", playlist_id, 2, ids[0], 3))
+        self.assertEqual("POSITION_OUT_OF_RANGE", out_of_range["error"]["code"])
+        self.assertEqual(2, out_of_range["error"]["details"]["maximum"])
+        self.assertEqual(out_of_range, self.store.get_command("cmd_move_range"))
+
+    def test_delete_returns_replayable_receipt_and_cascades_playlist_entries(self):
+        created = self.store.execute(create())
+        snapshot = created["result"]["playlist"]
+        command = delete("cmd_delete", snapshot["playlistId"], snapshot["revision"])
+
+        deleted = self.store.execute(command)
+        self.assertEqual({"deletedPlaylistId": snapshot["playlistId"], "deletedRevision": 0}, deleted["result"])
+        self.assertEqual(deleted, self.store.get_command("cmd_delete"))
+        self.assertEqual(deleted, self.store.execute(command))
+        with self.assertRaises(StoreError) as missing:
+            self.store.get_playlist(snapshot["playlistId"])
+        self.assertEqual("NOT_FOUND", missing.exception.error["code"])
+        db = sqlite3.connect(self.store._db_path)
+        try:
+            remaining_entries = db.execute(
+                "SELECT COUNT(*) FROM playlist_entries WHERE playlist_id = ?", (snapshot["playlistId"],)
+            ).fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(0, remaining_entries)
+
+        second_delete = self.store.execute(delete("cmd_delete_again", snapshot["playlistId"], 0))
+        self.assertEqual("REJECTED", second_delete["status"])
+        self.assertEqual("NOT_FOUND", second_delete["error"]["code"])
+        self.assertEqual(second_delete, self.store.get_command("cmd_delete_again"))
+
+    def test_revision_exhaustion_blocks_mutations_but_allows_noops_and_delete(self):
+        created = self.store.execute(create(items=[
+            {"mediaRef": LOCAL, "title": "One"},
+            {"mediaRef": LOCAL, "title": "Two"},
+        ]))
+        snapshot = created["result"]["playlist"]
+        playlist_id = snapshot["playlistId"]
+        max_revision = 9007199254740991
+        db = sqlite3.connect(self.store._db_path)
+        try:
+            db.execute("UPDATE playlists SET revision = ? WHERE playlist_id = ?", (max_revision, playlist_id))
+            db.commit()
+        finally:
+            db.close()
+
+        for command in (
+            rename("cmd_max_rename", playlist_id, max_revision, "Changed"),
+            remove("cmd_max_remove", playlist_id, max_revision, snapshot["entries"][0]["entryId"]),
+            move("cmd_max_move", playlist_id, max_revision, snapshot["entries"][0]["entryId"], 1),
+        ):
+            with self.subTest(command=command["action"]):
+                rejected = self.store.execute(command)
+                self.assertEqual("REVISION_EXHAUSTED", rejected["error"]["code"])
+                self.assertEqual(rejected, self.store.get_command(command["commandId"]))
+
+        same_name = self.store.execute(rename("cmd_max_rename_noop", playlist_id, max_revision, "Stories"))
+        self.assertEqual("APPLIED", same_name["status"])
+        self.assertEqual(max_revision, same_name["result"]["playlist"]["revision"])
+        same_position = self.store.execute(move(
+            "cmd_max_move_noop", playlist_id, max_revision, snapshot["entries"][0]["entryId"], 0
+        ))
+        self.assertEqual("APPLIED", same_position["status"])
+        self.assertEqual(max_revision, same_position["result"]["playlist"]["revision"])
+
+        deleted = self.store.execute(delete("cmd_max_delete", playlist_id, max_revision))
+        self.assertEqual({"deletedPlaylistId": playlist_id, "deletedRevision": max_revision}, deleted["result"])
+
+    def test_playlist_list_uses_validated_keyset_cursor_and_exact_response_shape(self):
+        for index in range(5):
+            self.store.execute(create(f"cmd_list_{index}", name=f"Playlist {index}", items=[]))
+
+        first = self.store.list_playlists(limit=2)
+        second = self.store.list_playlists(limit=2, cursor=first["nextCursor"])
+        third = self.store.list_playlists(limit=2, cursor=second["nextCursor"])
+        all_items = first["playlists"] + second["playlists"] + third["playlists"]
+
+        self.assertEqual({"contractVersion", "playlists", "nextCursor"}, set(first))
+        self.assertTrue(all(set(item) == {"playlistId", "name", "revision"} for item in all_items))
+        ids = [item["playlistId"] for item in all_items]
+        self.assertEqual(sorted(ids), ids)
+        self.assertEqual(5, len(set(ids)))
+        self.assertEqual(first["playlists"][-1]["playlistId"], first["nextCursor"])
+        self.assertEqual(second["playlists"][-1]["playlistId"], second["nextCursor"])
+        self.assertIsNone(third["nextCursor"])
+        self.assertEqual([], self.store.list_playlists(cursor="pl_not_present")["playlists"])
+        self.assertEqual(5, len(self.store.list_playlists()["playlists"]))
+
+    def test_playlist_list_rejects_invalid_limits_and_cursor_before_query(self):
+        for limit in (True, 1.0, 0, 201, "2"):
+            with self.subTest(limit=limit):
+                with self.assertRaises(ContractValidationError):
+                    self.store.list_playlists(limit=limit)
+        with self.assertRaises(ContractValidationError):
+            self.store.list_playlists(cursor="../not-a-cursor")
 
     def test_create_and_append_keep_order_duplicate_media_and_revision(self):
         first = self.store.execute(create())

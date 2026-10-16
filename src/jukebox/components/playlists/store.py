@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
 from jukebox.contracts.v1 import (
+    ContractValidationError,
     validate_command,
     validate_command_result,
     validate_error,
@@ -32,8 +33,16 @@ class PlaylistStore:
 
     def execute(self, command: Dict[str, Any]) -> Dict[str, Any]:
         parsed = validate_command(command)
-        if parsed["action"] not in {"PLAYLIST_CREATE", "PLAYLIST_APPEND"}:
-            raise NotImplementedError("This store slice supports playlist create and append only.")
+        handler = {
+            "PLAYLIST_CREATE": self._create,
+            "PLAYLIST_RENAME": self._rename,
+            "PLAYLIST_APPEND": self._append,
+            "PLAYLIST_REMOVE": self._remove,
+            "PLAYLIST_MOVE": self._move,
+            "PLAYLIST_DELETE": self._delete,
+        }.get(parsed["action"])
+        if handler is None:
+            raise NotImplementedError("This store slice supports playlist write actions only.")
         request_json = _canonical_json(parsed)
         conn = self._connect("PLAYLIST_WRITE")
         try:
@@ -60,10 +69,7 @@ class PlaylistStore:
                 (parsed["commandId"], request_json),
             )
             try:
-                if parsed["action"] == "PLAYLIST_CREATE":
-                    result = self._create(conn, parsed)
-                else:
-                    result = self._append(conn, parsed)
+                result = handler(conn, parsed)
             except _DomainRejection as rejection:
                 result = self._rejected(parsed, rejection.code, rejection.details, rejection.message)
             self._write_command_result(conn, parsed["commandId"], result)
@@ -152,6 +158,40 @@ class PlaylistStore:
         finally:
             conn.close()
 
+    def list_playlists(self, limit: int = 50, cursor: Optional[str] = None) -> Dict[str, Any]:
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ContractValidationError("limit", "invalid_integer")
+        if cursor is not None:
+            cursor = validate_identifier(cursor, "cursor")
+        conn = self._connect("PLAYLIST_LIST")
+        try:
+            if cursor is None:
+                rows = conn.execute(
+                    "SELECT playlist_id, name, revision FROM playlists "
+                    "ORDER BY playlist_id ASC LIMIT ?", (limit + 1,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT playlist_id, name, revision FROM playlists "
+                    "WHERE playlist_id > ? ORDER BY playlist_id ASC LIMIT ?", (cursor, limit + 1),
+                ).fetchall()
+            has_more = len(rows) > limit
+            page = rows[:limit]
+            return {
+                "contractVersion": 1,
+                "playlists": [
+                    {"playlistId": row[0], "name": row[1], "revision": row[2]}
+                    for row in page
+                ],
+                "nextCursor": page[-1][0] if has_more else None,
+            }
+        except sqlite3.OperationalError as exc:
+            raise self._database_error(exc, "PLAYLIST_LIST") from None
+        except sqlite3.DatabaseError:
+            raise _store_error("STORE_UNAVAILABLE", "PLAYLIST_LIST") from None
+        finally:
+            conn.close()
+
     def _create(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
         playlist_id = _new_id("pl")
         conn.execute(
@@ -205,6 +245,125 @@ class PlaylistStore:
                 "UPDATE playlists SET revision = ? WHERE playlist_id = ?", (revision, playlist_id)
             )
         return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+
+    def _rename(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        playlist_id = command["playlistId"]
+        name, revision = self._playlist_before_edit(conn, command)
+        if name != command["name"]:
+            self._ensure_revision_available(playlist_id, revision)
+            revision += 1
+            conn.execute(
+                "UPDATE playlists SET name = ?, revision = ? WHERE playlist_id = ?",
+                (command["name"], revision, playlist_id),
+            )
+        return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+
+    def _remove(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        playlist_id = command["playlistId"]
+        _, revision = self._playlist_before_edit(conn, command)
+        row = conn.execute(
+            "SELECT position FROM playlist_entries WHERE playlist_id = ? AND entry_id = ?",
+            (playlist_id, command["entryId"]),
+        ).fetchone()
+        if row is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "playlistEntry", "objectId": command["entryId"]},
+                "The requested playlist entry was not found.",
+            )
+        self._ensure_revision_available(playlist_id, revision)
+        conn.execute("DELETE FROM playlist_entries WHERE entry_id = ?", (command["entryId"],))
+        entry_ids = [row[0] for row in conn.execute(
+            "SELECT entry_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC",
+            (playlist_id,),
+        ).fetchall()]
+        self._reindex(conn, playlist_id, entry_ids)
+        conn.execute(
+            "UPDATE playlists SET revision = ? WHERE playlist_id = ?", (revision + 1, playlist_id)
+        )
+        return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+
+    def _move(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        playlist_id = command["playlistId"]
+        _, revision = self._playlist_before_edit(conn, command)
+        entry_ids = [row[0] for row in conn.execute(
+            "SELECT entry_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position ASC",
+            (playlist_id,),
+        ).fetchall()]
+        try:
+            old_position = entry_ids.index(command["entryId"])
+        except ValueError:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "playlistEntry", "objectId": command["entryId"]},
+                "The requested playlist entry was not found.",
+            ) from None
+        to_position = command["toPosition"]
+        if to_position >= len(entry_ids):
+            raise _DomainRejection(
+                "POSITION_OUT_OF_RANGE",
+                {"entryId": command["entryId"], "minimum": 0, "maximum": len(entry_ids) - 1},
+                "The requested final playlist position is out of range.",
+            )
+        if to_position == old_position:
+            return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+        self._ensure_revision_available(playlist_id, revision)
+        moved_id = entry_ids.pop(old_position)
+        entry_ids.insert(to_position, moved_id)
+        self._reindex(conn, playlist_id, entry_ids)
+        conn.execute(
+            "UPDATE playlists SET revision = ? WHERE playlist_id = ?", (revision + 1, playlist_id)
+        )
+        return self._applied(command, {"playlist": self._snapshot(conn, playlist_id)})
+
+    def _delete(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        playlist_id = command["playlistId"]
+        _, revision = self._playlist_before_edit(conn, command)
+        conn.execute("DELETE FROM playlists WHERE playlist_id = ?", (playlist_id,))
+        return self._applied(command, {
+            "deletedPlaylistId": playlist_id,
+            "deletedRevision": revision,
+        })
+
+    def _playlist_before_edit(self, conn: sqlite3.Connection,
+                              command: Dict[str, Any]) -> tuple[str, int]:
+        playlist_id = command["playlistId"]
+        row = conn.execute(
+            "SELECT name, revision FROM playlists WHERE playlist_id = ?", (playlist_id,)
+        ).fetchone()
+        if row is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "playlist", "objectId": playlist_id},
+                "The requested playlist was not found.",
+            )
+        if row[1] != command["expectedRevision"]:
+            raise _DomainRejection(
+                "REVISION_CONFLICT",
+                {"conflicts": [{
+                    "objectType": "playlist", "objectId": playlist_id,
+                    "expectedRevision": command["expectedRevision"],
+                    "actualRevision": row[1],
+                }]},
+                "The playlist changed since it was read.",
+            )
+        return row[0], row[1]
+
+    def _ensure_revision_available(self, playlist_id: str, revision: int) -> None:
+        if revision >= 9007199254740991:
+            raise _DomainRejection(
+                "REVISION_EXHAUSTED",
+                {"objectType": "playlist", "objectId": playlist_id},
+                "The playlist revision limit has been reached.",
+            )
+
+    def _reindex(self, conn: sqlite3.Connection, playlist_id: str, entry_ids: list[str]) -> None:
+        # Move all positions out of the valid range first to avoid transient UNIQUE collisions.
+        conn.execute(
+            "UPDATE playlist_entries SET position = position + 10001 WHERE playlist_id = ?",
+            (playlist_id,),
+        )
+        conn.executemany(
+            "UPDATE playlist_entries SET position = ? WHERE playlist_id = ? AND entry_id = ?",
+            [(position, playlist_id, entry_id) for position, entry_id in enumerate(entry_ids)],
+        )
 
     def _insert_entry(self, conn: sqlite3.Connection, playlist_id: str,
                       position: int, item: Dict[str, Any]) -> None:
