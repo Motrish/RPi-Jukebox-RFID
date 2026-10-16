@@ -48,20 +48,22 @@ Rollen sind keine elf permanent laufenden Agenten. Für jedes überschaubare Tic
 
 ## 3. Ausgangslage und Startbedingungen
 
-Bestätigt: Fork existiert, Connector liest Dateien und meldet push/admin. Ein echter Schreibvorgang ist noch nicht getestet. Beim letzten Branchcheck enthält der Fork nur develop; future3 ist nicht vorhanden. Lokales Git scheitert weiterhin am Netzwerkzugriff. Der Connector ersetzt keinen ausführbaren lokalen Checkout und keine isolierte Testumgebung.
+Bestätigt: Fork und V3-Objekte sind erreichbar. Branch-, Commit-, Datei- und Workflow-Schreibwege wurden zurückgelesen. feature/foundation enthält v3.6.0; future3/ci-baseline bewahrt exakt dessen Dateibaum und löste die unveränderte CI aus. Webbuild und Pythonmatrix bestehen; Installerbefunde stehen im Aufgabenstatus. Lokales Git scheitert weiterhin am Netzwerkzugriff. Der Connector stellt keinen lokalen Checkout her.
 
-Vor Coding erforderlich:
+Für vollständige Runtimeintegration erforderlich:
 
 1. Git-fähige Entwicklungsumgebung mit nutzbarem Repository und Abhängigkeiten herstellen, etwa geeigneter lokaler/Cloud-Arbeitsplatz. Kein Umgehen der bestehenden Sandboxregeln.
 2. V3-Basis vollständig aus Upstream übernehmen, mit exakter Commit-ID und Historie. Ein fremder SHA ist kein Beleg dafür, dass dessen Objekte im Fork verfügbar sind. Zuerst Objekterreichbarkeit prüfen; ansonsten über eine Git-fähige Umgebung übertragen. develop nicht auf V3 umschreiben.
 3. Baseline-Build und existierende Tests auf unverändertem V3-Stand ausführen, Befehle und bekannte Fehler erfassen.
 4. Auf einem isolierten Arbeitsbranch einen kleinen nachprüfbaren Schreibvorgang testen. Adminrechte alleine beweisen weder App-Schreibrechte noch Workflow-Schreibrechte.
 
+Fortsetzungsentscheidung am 16.10.2026: Transportfreie Verträge und Speicherung dürfen vor vollständigem G0 in isolierten GitHub-Branches entwickelt werden. Grundlage bleibt der vollständige, unveränderte V3-Dateibaum. Jeder Autor erhält einen eigenen lokalen Artefaktordner; dieser gilt ausdrücklich nicht als Repository-Checkout. Gezielte lokale Modulprüfungen und die vollständigen GitHub-Actions-Checkouts werden getrennt dokumentiert. Nur ein Owner schreibt je Datei. Runtimeintegration und Gerätefreigaben bleiben an ihre bisherigen Gates gebunden. Diese begrenzte Arbeitsweise nutzt den bestätigten Remote-Schreibweg, ohne den offenen lokalen Checkout als erledigt zu markieren.
+
 Hardware und Grafik bleiben offen: Pi-Modell, OS/Architektur, Reader, Tasten, DAC/HAT, PiSugar-Modell und Bestandsinstallation; Spotify-Konto/Key; sichtbare Dribbble-Grafik. Ohne Hardware sind Dokumentation, Verträge und Mocks möglich; Geräteabnahme bleibt offen. Ohne Grafik keine Behauptung einer vorlagengetreuen Gestaltung.
 
 ## 4. Schreibzuständigkeiten und Isolation
 
-Jeder Coding-Agent arbeitet in einem eigenen Worktree und Branch auf derselben ausdrücklich benannten Integrations-Commit-ID. Auch bei geteiltem Host verwendet jeder Toolaufruf den absoluten zugewiesenen Arbeitsordner. Der gemeinsame Standardordner ist keine Isolation. Falls getrennte Worktrees nicht verfügbar sind, darf nur ein Agent gleichzeitig Code schreiben.
+Jeder Coding-Agent arbeitet in einem eigenen Worktree und Branch auf derselben ausdrücklich benannten Integrations-Commit-ID. Auch bei geteiltem Host verwendet jeder Toolaufruf den absoluten zugewiesenen Arbeitsordner. Der gemeinsame Standardordner ist keine Isolation. Falls getrennte Worktrees nicht verfügbar sind, darf nur ein Agent gleichzeitig Code schreiben. Ausnahme der dokumentierten Remote-Arbeitsweise: getrennte Artefaktordner und GitHub-Branches mit disjunkten Schreibpfaden; vollständige Integration und Tests erfolgen seriell auf einem benannten Commit in CI.
 
 Geplante Pfade werden in F03 an reale Upstream-Einhängepunkte angepasst. Keine erfundenen vorhandenen Dateien oder Zeilennummern.
 

@@ -66,6 +66,8 @@ Felder und Semantik aus Hauptplan präzisieren: Liste versus laufende Queue, get
 
 Prosa in die zum vorhandenen Stack passenden maschinenlesbaren Verträge übersetzen. Bestehenden Transport wiederverwenden; Snapshot, Eventfolge und stabile Fehler abbilden. Root-Router/Pluginregistrierung nur im exklusiven X-Schreibfenster ändern.
 
+**Ausführungsaufteilung:** A02a liefert zunächst Python-stdlib-Validatoren und sprachunabhängige Fixtures gemäß CONTRACT 1; A02b bestätigt später JavaScriptkonformität. Öffentliche Transportanbindung bleibt eigenes gesichertes X-Fenster. A02 insgesamt ist durch A02a allein nicht erledigt.
+
 **Abnahme/Prüfung:** Backend und Frontend verstehen dieselben Fixtures; unbekannte Quelle, ungültige Revision und fehlende Pflichtfelder abgewiesen. Generierte Dateien haben einen klaren Erzeugungsweg.
 
 ## Player und Queue
@@ -91,6 +93,8 @@ Lokale Datei → Soloist-Einzeltrack → lokale Datei über gemeinsame Ausgabe a
 **Owner:** P / Luna high. **Vorgänger:** A02. **Bereich:** components/playlists/ und SQLite-Tests.
 
 Stabile Einträge, gleiche Medien mehrfach, getrennte gespeicherte Playlist/laufende Queue und Revisionen transaktional speichern. Konflikt und Wiederholung nach commandId definieren.
+
+**Ausführungsaufteilung:** P03a1 implementiert zunächst CREATE/GET/APPEND für Playlists mit gemeinsamem Idempotenzregister; P03a2 ergänzt die übrigen Playlistaktionen. P03b erweitert denselben Store seriell um Queueaktionen und objektübergreifende Übergänge. Alle Teilschritte bleiben transportfrei.
 
 **Abnahme/Prüfung:** speichern/laden erhält doppelte Titel und Reihenfolge; parallele Änderung auf alter Revision wird abgewiesen; derselbe Befehl hängt nur einmal an. Rollback unterbrochener Transaktion testen.
 

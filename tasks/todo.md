@@ -1,6 +1,6 @@
 # Phoniebox – Aufgabenstatus
 
-Entwicklung am 16.10.2026 durch den Nutzer gestartet. F01/F02 laufen; technische Produktimplementierung wartet auf ausführbare V3-Basis und Baseline.
+Entwicklung am 16.10.2026 durch den Nutzer gestartet. V3-Basis, Remote-Schreibweg und Web-/Python-Baseline sind bestätigt. Nach dem zurückgesetzten Nutzungslimit laufen A01 und die isolierte CI-Korrektur; transportfreie Module werden mit vollständigem CI-Checkout entwickelt.
 
 Verbindlich: [Hauptplan](../docs/superpowers/plans/2026-10-16-phoniebox-multi-agent-plan.md), [Backlog](../docs/superpowers/plans/multi-agent/backlog.md). Diese Datei ist die einzige operative Statusliste.
 
@@ -13,11 +13,11 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild/Python erfolgreich; Bullseye-Build fehlgeschlagen, Bookworm läuft; Quellen-Teilbericht vorhanden |
 | F04 | Zielgerät und Testressourcen festhalten | blocked | Geräteangaben asynchron angefragt; unabhängige Arbeit läuft |
 | F05 | Designreferenz verfügbar machen | blocked | Abruf erneut fehlgeschlagen; tasks/f05-design-report.md |
-| A01 | Verbindliche Prosa-Verträge | planned | Noch keine Produktumsetzung |
-| A02 | Verträge technisch verankern | planned | Noch keine Produktumsetzung |
+| A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
+| A02 | Verträge technisch verankern | in_progress | A02a Python/Fixtures durch Luna; A02b JS und gesicherter Anschluss separat |
 | P01 | Lokalen Anbieter kapseln | planned | Noch keine Produktumsetzung |
 | P02 | Quellenwechsel als Hardwareversuch | planned | Noch keine Produktumsetzung |
-| P03 | Playlist- und Queue-Speicherung | planned | Noch keine Produktumsetzung |
+| P03 | Playlist- und Queue-Speicherung | in_progress | P03a1 Playlistkern in Vorbereitung; P03a2 weitere Playlistaktionen und P03b Queue folgen seriell |
 | P04 | Serialisierte Wiedergabe und Abbruch | planned | Noch keine Produktumsetzung |
 | P05 | Soloist als zweiter Anbieter integrieren | planned | Noch keine Produktumsetzung |
 | P06 | Playlistaktionen und Offline-Regeln | planned | Noch keine Produktumsetzung |
@@ -54,8 +54,8 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 ## Bekannte Startvoraussetzungen
 
 - Git-CLI-Netzwerkzugriff ist aktuell blockiert; F01 benötigt einen zulässigen ausführbaren Entwicklungsarbeitsplatz.
-- Fork enthält nach letztem Check nur develop; V3-Objekte und Basisbranch in F02 bereitstellen.
-- Connector-Schreibweg tatsächlich durch Commit/Ref/Datei-Zurücklesen bestätigt; Änderungen von Workflowdateien weiterhin nicht separat geprüft.
+- V3-Objekte sind erreichbar; feature/foundation und future3/modern-ui bestehen. develop bleibt unverändert.
+- Connector-Schreibweg einschließlich Workflowdatei durch Commit/Ref/Datei-Zurücklesen bestätigt; CI-Korrektur 83b0c01 liegt in Draft-PR 2, Review und Runnerabschluss offen.
 - Zielgerät, OS-Abbild, PiSugar-Modell, Audio/Reader und Spotify-Zugang noch nicht erfasst.
 - Referenzgrafik bislang nicht abrufbar; F05 offen.
 
@@ -91,3 +91,17 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 - Dokumentationsformat korrigiert, um den fehlgeschlagenen Markdowncheck des Plan-PRs zu beheben.
 - Beide aktiven Subagenten meldeten das Nutzungslimit, Die Limitmeldung nennt 11:06 PM als nächsten Versuch; Clientzeit ist maßgeblich. Coding bleibt Luna zugeordnet; keine Astra-/Sol-Coding-Ersatzroute.
 - Dokumentations-PR nach Formatkorrektur: Markdownchecks erfolgreich auf 029ba31b4cbb259f9c336855122a384cccd7ac7e.
+
+## Fortsetzung nach Limitreset
+
+- Luna und Sol antworten wieder; die frühere Limitmeldung ist historisch und blockiert die aktuelle Arbeit nicht mehr.
+- future3/modern-ui startet exakt bei 58826fcf880f521292c56c43b682fa67cfdc2418 und ist der isolierte V3-Integrationsbranch. develop wird nicht umgeschrieben.
+- Draft-PR 2 enthält ausschließlich die von Luna verfasste Entfernung des aktiven Bullseye-Installerjobs. Bookworm bleibt Ziel der neuen Supportmatrix; der ursprüngliche Bullseye-Fehler wird weiterhin dokumentiert.
+- Remote-Entwicklung ist für transportfreie Module freigegeben: eigene Artefaktordner, eindeutige Schreibowner und isolierte GitHub-Branches bewahren den vollständigen Basisbaum. GitHub Actions testet einen vollständigen Checkout. Lokal ausgeführte Modulprüfungen sind nur Teilnachweise und werden entsprechend bezeichnet.
+- Diese Arbeitsweise ersetzt weder lokale Worktrees noch Geräteprüfungen. F01 und G0 bleiben teilweise offen; Runtimeanbindung, Quellenwechsel, Installerabnahme und vorlagengetreues Design behalten ihre bisherigen Nachweisbedingungen.
+### Freigegebene Teilschritte
+
+- CONTRACT 1 ist für A02a fachlich geprüft: versionierte Wurzeln, geschlossene Felder, exklusive Resultatform und konkrete Fehler-/Idempotenzregeln. Gesamte Runtimearchitektur bleibt offen.
+- A02a: Luna besitzt vier neue Dateien unter src/jukebox/contracts und test/contracts, eigene Branchbasis 58826fc; keine Runtime-/RPC-/CI-/Webänderungen.
+- P03a1: Luna bereitet ausschließlich Playlist CREATE/GET/APPEND und COMMAND_GET vor. Weitere Playlistaktionen sind P03a2; Queue und objektübergreifende Übergänge sind P03b. Ein gemeinsames Commandregister wird seriell erweitert.
+- CI-Commit 83b0c01 wurde unabhängig durch Sol geprüft: keine sperrenden Diffbefunde. Bookworm-Runnerabschluss bleibt vor Integration erforderlich; die Änderung repariert Bullseye nicht, sondern begrenzt die Zielmatrix.
