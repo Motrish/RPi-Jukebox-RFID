@@ -15,3 +15,13 @@ Die Entwicklung ist nach dem abgestimmten Mehragentenplan gestartet.
 Die unveränderte V3-Releasebasis liegt auf feature/foundation. Der separate Branch future3/ci-baseline prüft denselben V3-Dateibaum mit den vorhandenen Upstream-Workflows. Dieser Dokumentationsbranch enthält die Pläne und Ausführungsnachweise, keine Produktcodeänderungen.
 
 Luna schreibt alle ausführbaren Projektartefakte. Sol übernimmt Planung und Review. Astra ist ausgeschlossen.
+
+## Implementierungsnachweise
+
+Der geprüfte transportfreie Daten-/Speicherkern liegt auf [future3/modern-ui](https://github.com/Motrish/RPi-Jukebox-RFID/tree/future3/modern-ui). Die folgenden Berichte benennen jeweils den tatsächlich geprüften SHA; der aktuelle Gesamtstatus steht weiterhin ausschließlich in todo.md.
+
+- [A02a-Verträge](../../../tasks/a02-contracts-report.md) und [Review](../../../tasks/a02-review.md)
+- [P03a1-Speicherkern](../../../tasks/p03a1-store-report.md) und [Review](../../../tasks/p03a1-review.md)
+- [P03a2-Playlistaktionen](../../../tasks/p03a2-playlist-report.md) und [Review](../../../tasks/p03a2-review.md)
+- [P03b-Queues](../../../tasks/p03b-queue-report.md) und [Review](../../../tasks/p03b-review.md)
+- [Unabhängige Storeproben](../../../tasks/q01-store-regressions-report.md) und [Review](../../../tasks/q01-store-review.md)

@@ -50,7 +50,7 @@ Keine dieser geprüften Dateien bietet workflow_dispatch. Der isolierte Integrat
 
 ## Offene Voraussetzungen
 
-Lokaler Gittransport und Worktrees bleiben blockiert. Beide aktiven Subagenten meldeten ein Nutzungslimit; Luna-Coding kann deshalb aktuell nicht fortgesetzt werden. Astra und Sol-Coding werden nicht als Ersatz verwendet. Geräteangaben und sichtbare Referenz fehlen weiter.
+Lokaler Gittransport und Worktrees bleiben blockiert. Die frühere Limitmeldung ist historisch; Luna-Coding wurde nach dem Reset auf isolierten Remote-Branches fortgesetzt. Geräteangaben und sichtbare Referenz fehlen weiter. Die gültige eingeschränkte Arbeitsweise steht unten sowie in tasks/todo.md.
 
 ## Tatsächlicher CI-Zwischenstand
 
@@ -58,7 +58,7 @@ Lokaler Gittransport und Worktrees bleiben blockiert. Beide aktiven Subagenten m
 - Pythonmatrix 3.9 bis 3.13: bestanden (Run 38955136500).
 - V3-Markdown: bestanden (Run 38955136416).
 - Installationsworkflow 38955136828: Bullseye-armv7-Basisimage schlägt beim apt-Paketdownload mit mehreren HTTP-404-Antworten fehl; Buildexit 100. Der Installer wurde in diesem Job nicht erreicht. Es handelt sich um einen Fehler der unveränderten Baseline, nicht um neu implementierten Code.
-- Bookworm-armv7-Basisimage ist noch im Aufbau; keine erfolgreiche Installation behauptet.
+- Historischer Zwischenstand Bookworm-armv7: damals im Aufbau; aktueller Abschluss siehe unten.
 - Markdownprüfung des Dokumentations-PRs nach Formatkorrektur: bestanden (Runs 38955705551 und 38955697813).
 
 ## Ergänzte lesende Inventur für A01
@@ -112,3 +112,9 @@ Geprüft: Commit `83b0c01f655f7943ed238371d14574e5129a6d21`, Elterncommit `58826
 Ergebnis: kein freigabesperrender Befund in diesem engen Diff. Die Änderung beschränkt die Installationsprüfmatrix auf Bookworm; sie repariert den zuvor beobachteten Bullseye-apt-404-Fehler nicht. Der ursprüngliche Baselinefehler bleibt dokumentiert; ein erfolgreicher Bookworm-Installerlauf oder neue Hardwarekompatibilität folgt aus dem Diff nicht. Dieses Review ist statisch und gilt exakt dem genannten Commit, nicht späteren Änderungen.
 
 Quelle: [exakter CI-Commitdiff](https://github.com/Motrish/RPi-Jukebox-RFID/commit/83b0c01f655f7943ed238371d14574e5129a6d21).
+
+## Abgeschlossene Cloudnachweise
+
+Der unveränderte Bookworm-Baselinelauf 38955136828 hat Imagebuild und alle fünf Installerprüfungen erfolgreich abgeschlossen; der Gesamtworkflow bleibt wegen des separat dokumentierten Bullseye-Fehlers fehlgeschlagen. Die isolierte Bookworm-Matrixkorrektur 83b0c01 bestand anschließend Imagebuild, alle fünf Prüfungen und cleanup im Lauf 38957569477 und wurde nach unabhängigem Review in PR 2 integriert. Weder Zielhardware noch ein neuer Webinstaller wurden damit abgenommen.
+
+Transportfreie Contracts und Playlist-/Queue-Speicherung sind durch Luna implementiert, unabhängig reviewed und auf future3/modern-ui integriert. Die Pythonmatrix 3.9–3.13 einschließlich finish bestand für die jeweiligen geprüften Code-SHAs (38959948228, 38960469965, 38961153409, 38962176404). Verbindliche SHAs und zusätzliche neue Regressionen stehen in tasks/todo.md und den Ticketberichten; diese Inventur verdoppelt die operative Liste nicht.
