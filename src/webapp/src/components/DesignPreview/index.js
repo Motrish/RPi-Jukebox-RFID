@@ -18,7 +18,6 @@ import {
   getUpcomingTracks,
   INITIAL_TRACK_ID,
   RECENT_TRACK_IDS,
-  TRACKS,
 } from './previewModel';
 import './styles.css';
 
@@ -79,10 +78,10 @@ function TrackGrid({ tracks, onSelect, query, onReset }) {
   );
 }
 
-function SectionHeading({ eyebrow, title, action, onAction }) {
+function SectionHeading({ eyebrow, title, titleId, action, onAction }) {
   return (
     <div className="section-heading">
-      <div><p className="eyebrow section-eyebrow">{eyebrow}</p><h2>{title}</h2></div>
+      <div><p className="eyebrow section-eyebrow">{eyebrow}</p><h2 id={titleId}>{title}</h2></div>
       {action && <button className="text-button" type="button" onClick={onAction}>{action} <span aria-hidden="true">→</span></button>}
     </div>
   );
@@ -269,7 +268,7 @@ function PreviewShell() {
             <div className="breadcrumbs"><span className="breadcrumb-kicker">DEINE MUSIK</span><span className="breadcrumb-current">{ROUTES.find((route) => route.path === `/${currentView}`)?.label || 'Start'}</span></div>
             <label className="search-box" htmlFor="preview-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.4" /><path d="m16 16 4.1 4.1" /></svg>
-              <input id="preview-search" ref={searchRef} type="search" placeholder="Titel, Album oder Quelle suchen" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input id="preview-search" ref={searchRef} type="search" aria-label="Titel, Album oder Quelle suchen" placeholder="Titel, Album oder Quelle suchen" value={query} onChange={(event) => setQuery(event.target.value)} />
               <kbd>/</kbd>
             </label>
             {batteryAvailable && (
@@ -289,11 +288,11 @@ function PreviewShell() {
               <>
                 <Hero onPlay={startMix} />
                 <section className="music-section" aria-labelledby="favorites-title">
-                  <SectionHeading eyebrow="FÜR JEDEN MOMENT" title="Lieblingsmusik" action="Alle Titel" onAction={() => navigate('/music')} />
+                  <SectionHeading eyebrow="FÜR JEDEN MOMENT" title="Lieblingsmusik" titleId="favorites-title" action="Alle Titel" onAction={() => navigate('/music')} />
                   <TrackGrid tracks={visibleTracks.slice(0, 6)} onSelect={selectTrack} query={query} onReset={resetSearch} />
                 </section>
                 {(!query || recentTracks.length > 0) && <section className="music-section recent-section" aria-labelledby="recent-title">
-                  <SectionHeading eyebrow="ZULETZT BEI EUCH" title="Kürzlich verwendet" />
+                  <SectionHeading eyebrow="ZULETZT BEI EUCH" title="Kürzlich verwendet" titleId="recent-title" />
                   <RecentList tracks={recentTracks} onSelect={selectTrack} />
                 </section>}
               </>
