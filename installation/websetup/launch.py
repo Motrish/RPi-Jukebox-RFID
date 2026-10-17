@@ -7,7 +7,9 @@ import http.client
 import os
 from pathlib import Path
 import shutil
+import secrets
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -26,10 +28,17 @@ from tools.web_bundle import BundleError  # noqa: E402
 _READY_TIMEOUT = 8.0
 _NGINX_TEST_TIMEOUT = 8.0
 _CHILD_STOP_TIMEOUT = 2.0
+
+
+class _SafeLaunchError(Exception):
+    """A deliberately authored diagnostic that contains no local path data."""
+
+
 _TEMPLATE_TOKENS = {
     "@@BOOTSTRAP_LISTEN_PORT@@": "listen_port",
     "@@BOOTSTRAP_UPSTREAM_PORT@@": "upstream_port",
     "@@BOOTSTRAP_WEBROOT@@": "webroot",
+    "@@BOOTSTRAP_READY_TOKEN@@": "ready_token",
 }
 
 
@@ -47,44 +56,53 @@ def _parser() -> argparse.ArgumentParser:
 def _nginx_executable(value: Optional[str]) -> str:
     executable = value if value is not None else shutil.which("nginx")
     if executable is None:
-        raise RuntimeError("nginx was not found; install the existing nginx prerequisite")
+        raise _SafeLaunchError("nginx was not found; install the existing nginx prerequisite")
     try:
         path = Path(executable).resolve(strict=True)
         if not path.is_file() or not os.access(str(path), os.X_OK):
-            raise RuntimeError
-    except (OSError, RuntimeError):
-        raise RuntimeError("nginx-binary must identify an existing executable") from None
+            raise _SafeLaunchError("nginx-binary must identify an existing executable")
+    except OSError:
+        raise _SafeLaunchError("nginx-binary must identify an existing executable") from None
     return str(path)
 
 
 def _nginx_quote(value: str) -> str:
-    if any(ord(character) < 32 or ord(character) == 127 for character in value):
-        raise RuntimeError("private path contains a character nginx cannot represent safely")
+    if "$" in value or any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise _SafeLaunchError("private filesystem path cannot be represented safely by nginx")
     return '"{}"'.format(value.replace("\\", "\\\\").replace('"', '\\"'))
 
 
 def _render_config(template_path: Path, destination: Path, listen_port: int,
-                   upstream_port: int, webroot: Path) -> None:
+                   upstream_port: int, webroot: Path, ready_token: str) -> None:
     try:
         source = template_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
-        raise RuntimeError("the fixed nginx template is unavailable") from None
+        raise _SafeLaunchError("the fixed nginx template is unavailable") from None
     replacements = {
         "@@BOOTSTRAP_LISTEN_PORT@@": str(listen_port),
         "@@BOOTSTRAP_UPSTREAM_PORT@@": str(upstream_port),
         "@@BOOTSTRAP_WEBROOT@@": _nginx_quote(str(webroot)),
+        "@@BOOTSTRAP_READY_TOKEN@@": ready_token,
     }
     for token, value in replacements.items():
         if source.count(token) != 1:
-            raise RuntimeError("the fixed nginx template has invalid parameters")
+            raise _SafeLaunchError("the fixed nginx template has invalid parameters")
         source = source.replace(token, value)
     if any(token in source for token in _TEMPLATE_TOKENS):
-        raise RuntimeError("the fixed nginx template has unexpanded parameters")
+        raise _SafeLaunchError("the fixed nginx template has unexpanded parameters")
     try:
         with destination.open("x", encoding="utf-8", newline="\n") as config:
             config.write(source)
     except OSError:
-        raise RuntimeError("private nginx configuration could not be written") from None
+        raise _SafeLaunchError("private nginx configuration could not be written") from None
+
+
+def _assert_outer_port_available(port: int) -> None:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", port))
+    except OSError:
+        raise _SafeLaunchError("the requested loopback port is already occupied") from None
 
 
 def _finish_process(process: subprocess.Popen, timeout: float) -> None:
@@ -112,27 +130,32 @@ def _nginx_config_test(popen_factory: Callable, executable: str,
             stderr=subprocess.STDOUT, text=True,
         )
     except OSError:
-        raise RuntimeError("nginx configuration test could not start") from None
+        raise _SafeLaunchError("nginx configuration test could not start") from None
     try:
         _output, _error = process.communicate(timeout=_NGINX_TEST_TIMEOUT)
     except subprocess.TimeoutExpired:
         _finish_process(process, _CHILD_STOP_TIMEOUT)
-        raise RuntimeError("nginx configuration test exceeded its time limit") from None
+        raise _SafeLaunchError("nginx configuration test exceeded its time limit") from None
     if process.returncode != 0:
-        raise RuntimeError("nginx rejected the private configuration")
+        raise _SafeLaunchError("nginx rejected the private configuration")
 
 
-def _wait_ready(process: subprocess.Popen, port: int, stop_requested: threading.Event) -> bool:
+def _wait_ready(process: subprocess.Popen, port: int, ready_token: str,
+                stop_requested: threading.Event) -> bool:
     deadline = time.monotonic() + _READY_TIMEOUT
     while time.monotonic() < deadline and not stop_requested.is_set():
         if process.poll() is not None:
             return False
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)
         try:
-            connection.request("GET", "/setup/", headers={"Host": "127.0.0.1:{}".format(port)})
+            connection.request(
+                "GET", "/setup/",
+                headers={"Host": "127.0.0.1:{}".format(port),
+                         "X-I01B-Readiness": ready_token},
+            )
             response = connection.getresponse()
-            response.read(1)
-            if response.status == 200:
+            response.read()
+            if response.status == 204 and process.poll() is None:
                 return True
         except (OSError, http.client.HTTPException):
             pass
@@ -152,7 +175,7 @@ def _start_upstream(make_server_factory: Callable):
             httpd.server_close()
         except (NameError, OSError):
             pass
-        raise RuntimeError("the local preflight listener could not start") from None
+        raise _SafeLaunchError("the local preflight listener could not start") from None
     return httpd, thread
 
 
@@ -163,19 +186,21 @@ def _stop_upstream(httpd, thread: Optional[threading.Thread]) -> None:
     httpd.server_close()
 
 
-def _wait_until_stopped(child: subprocess.Popen, args: argparse.Namespace,
+def _wait_until_stopped(child: subprocess.Popen, args: argparse.Namespace, ready_token: str,
                         stop_requested: threading.Event) -> int:
-    if not _wait_ready(child, args.port, stop_requested):
+    if not _wait_ready(child, args.port, ready_token, stop_requested):
         if stop_requested.is_set():
             return 0
         if child.poll() is not None:
-            raise RuntimeError("nginx exited before becoming ready; the port may be occupied")
-        raise RuntimeError("nginx did not become ready before the startup deadline")
+            raise _SafeLaunchError("nginx exited before becoming ready; the port may be occupied")
+        raise _SafeLaunchError("nginx did not become ready before the startup deadline")
+    if child.poll() is not None:
+        raise _SafeLaunchError("nginx exited before becoming ready")
     print("Setup: http://127.0.0.1:{}/setup/".format(args.port), flush=True)
     print("React Vorschau: http://127.0.0.1:{}/#/design-preview".format(args.port), flush=True)
     while not stop_requested.wait(0.05):
         if child.poll() is not None:
-            raise RuntimeError("nginx exited unexpectedly")
+            raise _SafeLaunchError("nginx exited unexpectedly")
     return 0
 
 
@@ -183,7 +208,6 @@ def _serve_verified_bundle(args: argparse.Namespace, webroot: Path,
                            make_server_factory: Callable, popen_factory: Callable,
                            executable: str, stop_requested: threading.Event) -> int:
     private_parent = webroot.parent.parent
-    _nginx_quote(str(webroot))
     prefix = private_parent / "nginx-prefix"
     logs = prefix / "logs"
     logs.mkdir(parents=True, mode=0o700)
@@ -195,9 +219,10 @@ def _serve_verified_bundle(args: argparse.Namespace, webroot: Path,
     try:
         upstream_port = int(httpd.server_address[1])
         if not 1 <= upstream_port <= 65535:
-            raise RuntimeError("the local preflight listener returned an invalid port")
+            raise _SafeLaunchError("the local preflight listener returned an invalid port")
         template = CHECKOUT_ROOT / "resources" / "default-settings" / "nginx.bootstrap-loopback.conf"
-        _render_config(template, config, args.port, upstream_port, webroot)
+        ready_token = secrets.token_hex(32)
+        _render_config(template, config, args.port, upstream_port, webroot, ready_token)
         _nginx_config_test(popen_factory, executable, prefix, config)
         if stop_requested.is_set():
             return 0
@@ -209,8 +234,8 @@ def _serve_verified_bundle(args: argparse.Namespace, webroot: Path,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
         except OSError:
-            raise RuntimeError("nginx could not start") from None
-        return _wait_until_stopped(child, args, stop_requested)
+            raise _SafeLaunchError("nginx could not start") from None
+        return _wait_until_stopped(child, args, ready_token, stop_requested)
     finally:
         if child is not None:
             _finish_process(child, _CHILD_STOP_TIMEOUT)
@@ -236,6 +261,8 @@ def _serve(args: argparse.Namespace, make_server_factory: Callable,
             with bundle.staged_bundle(
                 args.archive, args.manifest, args.repository, args.commit, private_parent,
             ) as webroot:
+                _nginx_quote(str(webroot))
+                _assert_outer_port_available(args.port)
                 executable = _nginx_executable(args.nginx_binary)
                 return _serve_verified_bundle(
                     args, webroot, make_server_factory, popen_factory,
@@ -263,11 +290,8 @@ def run(argv: Optional[Sequence[str]] = None, *, make_server_factory=None,
         return _serve(args, make_server_factory, popen_factory)
     except BundleError as error:
         print("bootstrap-web: bundle rejected: {}".format(error), file=sys.stderr)
-    except (RuntimeError, OSError, ValueError) as error:
-        message = str(error)
-        if "path" in message.lower() or ":\\" in message:
-            message = "launcher could not safely prepare its private files"
-        print("bootstrap-web: {}".format(message), file=sys.stderr)
+    except _SafeLaunchError as error:
+        print("bootstrap-web: {}".format(error), file=sys.stderr)
     except Exception:
         print("bootstrap-web: local setup could not be started safely", file=sys.stderr)
     return 1

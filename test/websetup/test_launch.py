@@ -5,6 +5,7 @@ discovery stays stdlib-only and quick.
 """
 
 import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import http.client
 import importlib
 import json
@@ -16,6 +17,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -113,6 +115,98 @@ class LauncherCliTests(unittest.TestCase):
             with socket.socket() as probe:
                 self.assertNotEqual(probe.connect_ex(("127.0.0.1", port)), 0)
 
+    def test_active_foreign_http_200_is_never_probed_or_announced(self):
+        requests = []
+
+        class ForeignHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                body = b"foreign listener"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, _format, *_args):
+                return
+
+        foreign = ThreadingHTTPServer(("127.0.0.1", 0), ForeignHandler)
+        foreign_thread = threading.Thread(target=foreign.serve_forever, daemon=True)
+        foreign_thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                arguments = self.base_args(temporary, foreign.server_address[1])
+                arguments.extend(["--nginx-binary", sys.executable])
+
+                class CompletedConfig:
+                    returncode = 0
+
+                    def communicate(self, timeout=None):
+                        return "", ""
+
+                class DelayedExit:
+                    returncode = None
+                    polls = 0
+
+                    def poll(self):
+                        self.polls += 1
+                        return None if self.polls == 1 else 1
+
+                    def wait(self, timeout=None):
+                        self.returncode = 1
+                        return self.returncode
+
+                    def terminate(self):
+                        self.returncode = -15
+
+                    def kill(self):
+                        self.returncode = -9
+
+                child = DelayedExit()
+                process_calls = []
+
+                def popen_factory(command, **_kwargs):
+                    process_calls.append(list(command))
+                    return CompletedConfig() if "-t" in command else child
+
+                output = StringIO()
+                errors = StringIO()
+                with redirect_stdout(output), redirect_stderr(errors):
+                    result = launch.run(arguments, popen_factory=popen_factory)
+                self.assertNotEqual(result, 0)
+                self.assertNotIn("http://127.0.0.1:{}/setup/".format(foreign.server_address[1]),
+                                 output.getvalue())
+                self.assertNotIn("/#/design-preview", output.getvalue())
+                self.assertEqual(requests, [])
+                self.assertEqual(process_calls, [])
+                self.assertNotIn("Traceback", output.getvalue() + errors.getvalue())
+                self.assertEqual(raw_http(foreign.server_address[1], "/setup/")[0], 200)
+                self.assertEqual(requests, ["/setup/"])
+        finally:
+            foreign.shutdown()
+            foreign.server_close()
+            foreign_thread.join(timeout=2)
+
+    def test_dollar_private_temp_path_rejects_before_listener_factories(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary) / "$server_port"
+            parent.mkdir()
+            arguments = self.base_args(temporary)
+            arguments.extend(["--nginx-binary", sys.executable])
+            listener_factory = mock.Mock(side_effect=AssertionError("listener created"))
+            process_factory = mock.Mock(side_effect=AssertionError("process created"))
+            output = StringIO()
+            errors = StringIO()
+            with mock.patch.object(launch.tempfile, "tempdir", str(parent)):
+                with redirect_stdout(output), redirect_stderr(errors):
+                    result = launch.run(arguments, make_server_factory=listener_factory,
+                                        popen_factory=process_factory)
+            self.assertNotEqual(result, 0)
+            self.assertEqual(listener_factory.call_count, 0)
+            self.assertEqual(process_factory.call_count, 0)
+            self.assertNotIn(str(parent), output.getvalue() + errors.getvalue())
+            self.assertEqual(list(parent.iterdir()), [])
+
     def test_missing_nginx_is_diagnosed_without_install_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:
             args = self.base_args(temporary)
@@ -122,6 +216,22 @@ class LauncherCliTests(unittest.TestCase):
             combined = result.stdout + result.stderr
             self.assertNotIn("Traceback", combined)
             self.assertNotIn("apt", combined.lower())
+
+    def test_raw_filesystem_exception_is_replaced_with_fixed_diagnostic(self):
+        raw_error = "/tmp/i01b-bootstrap-test/nginx-prefix/logs: private-payload-7d31"
+        arguments = ["--archive", "unused", "--manifest", "unused",
+                     "--repository", "Motrish/RPi-Jukebox-RFID", "--commit", "a" * 40,
+                     "--nginx-binary", sys.executable]
+        output = StringIO()
+        errors = StringIO()
+        with mock.patch.object(launch.tempfile, "TemporaryDirectory", side_effect=OSError(raw_error)):
+            with redirect_stdout(output), redirect_stderr(errors):
+                result = launch.run(arguments)
+        combined = output.getvalue() + errors.getvalue()
+        self.assertNotEqual(result, 0)
+        self.assertNotIn(raw_error, combined)
+        self.assertNotIn("private-payload-7d31", combined)
+        self.assertNotIn("Traceback", combined)
 
     @unittest.skipUnless(os.name == "posix", "nginx process failure check runs on Linux CI")
     def test_nginx_config_test_failure_leaves_no_listener_or_private_stage(self):
@@ -518,10 +628,25 @@ def verify_nginx_child_exit(args, output, private_parent):
 
 
 def verify_real_nginx_port_collision(args, output, private_parent):
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        listener.listen(1)
-        port = listener.getsockname()[1]
+    requests = []
+
+    class ForeignHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            body = b"foreign listener"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    foreign = ThreadingHTTPServer(("127.0.0.1", 0), ForeignHandler)
+    foreign_thread = threading.Thread(target=foreign.serve_forever, daemon=True)
+    foreign_thread.start()
+    port = foreign.server_address[1]
+    try:
         result = subprocess.run(
             launcher_command(args, port), cwd=output,
             env=dict(os.environ, TMPDIR=str(private_parent)),
@@ -532,10 +657,46 @@ def verify_real_nginx_port_collision(args, output, private_parent):
             raise AssertionError("real nginx launcher adopted an occupied loopback port")
         if "Traceback" in result.stdout + result.stderr:
             raise AssertionError("real nginx port collision printed a traceback")
-        probe = socket.create_connection(("127.0.0.1", port), timeout=1)
-        probe.close()
+        if "/setup/" in result.stdout or "/#/design-preview" in result.stdout:
+            raise AssertionError("launcher announced readiness for a foreign HTTP server")
+        if requests:
+            raise AssertionError("launcher sent a readiness probe to the pre-existing listener")
+        status, _headers, body = raw_http(port, "/setup/")
+        if status != 200 or body != b"foreign listener":
+            raise AssertionError("launcher changed the active foreign HTTP service")
+        if requests != ["/setup/"]:
+            raise AssertionError("foreign HTTP service did not remain independently usable")
+    finally:
+        foreign.shutdown()
+        foreign.server_close()
+        foreign_thread.join(timeout=2)
     if list(private_parent.iterdir()):
         raise AssertionError("real nginx port collision leaked private files")
+
+
+def verify_dollar_temp_path(args, output):
+    private_parent = output / "private-$server_port"
+    private_parent.mkdir(mode=0o700)
+    port = free_port()
+    process = subprocess.Popen(launcher_command(args, port), cwd=output,
+                               env=dict(os.environ, TMPDIR=str(private_parent)),
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        _stdout, _stderr, _survivors = finish_owned_process(process, [process.pid], whole_group=True)
+        raise AssertionError("dollar-path launch exceeded its rejection deadline") from None
+    combined = stdout + stderr
+    if process.returncode == 0 or "Traceback" in combined:
+        raise AssertionError("dollar-bearing nginx root path was not rejected safely")
+    if str(private_parent) in combined or "/setup/" in stdout or "/#/design-preview" in stdout:
+        raise AssertionError("dollar-path rejection leaked a path or announced readiness")
+    if list(private_parent.iterdir()):
+        raise AssertionError("dollar-path rejection leaked private files")
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            raise AssertionError("dollar-path rejection left an outer listener")
 
 
 def verify_quoted_temp_path(args, output):
@@ -623,6 +784,8 @@ def verify_primary_shutdown(args, output, private_parent, archive_bytes, manifes
 def run_lifecycle_acceptance(args, output, private_parent, checks):
     verify_real_nginx_port_collision(args, output, private_parent)
     checks.append("real nginx rejected an occupied port without affecting its owner")
+    verify_dollar_temp_path(args, output)
+    checks.append("real nginx launch rejected a variable-bearing private path before listeners")
     verify_signal_cleanup(args, output, private_parent, signal.SIGINT)
     checks.append("Ctrl-C stopped owned process and both listeners")
     verify_signal_cleanup(args, output, private_parent, signal.SIGTERM)
