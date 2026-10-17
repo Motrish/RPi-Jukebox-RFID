@@ -22,7 +22,7 @@ Revision/Positionen sind in Python bis 9007199254740991 begrenzt. JS muss Number
 
 Python len zählt Unicodecodepoints; JS String.length zählt UTF16-Einheiten. Namen/Titel/Fehlertexte müssen die tatsächlichen Pythonlängen 256/1024 spiegeln, etwa mit Codepointzählung, ohne NFC-Normalisierung oder Texttrimmung. Python prüft zusätzlich strip auf allen vier Textfamilien, auch Titel. JS trim bzw. \s hat eine andere Whitespace-Menge (unter anderem FEFF gegenüber 0085/001C–001F); dies gezielt nachweisen statt unbemerkt verengen/erweitern. ASCII-IDs/Spotifyregex müssen den gesamten String treffen: JS-$ kann vor abschließendem LF passen, Python fullmatch/\Z nicht. Keine Pfade/Unicode-IDs akzeptieren.
 
-Geschlossene Objekte verlangen eigene vorhandene Schlüssel; Arrays/null, fehlend/undefined und zusätzliche Felder nicht per Serialisierung verstecken. Prototypebezeichner wie __proto__/constructor/toString dürfen keine Aktions-/Fehler-Map umgehen. Null bleibt nur an ausdrücklich erlaubten Stellen zulässig. Doppelte Medien mit verschiedenen entryIds erlaubt; gleiche entryId, Positionslücken, fremde currentEntryId und ungepaarte Sourcefelder abweisen. Tief abgelöste Ausgabekopien erhalten.
+Geschlossene Objekte verlangen eigene vorhandene Schlüssel; Arrays/null, fehlend/undefined und zusätzliche Felder nicht per Serialisierung verstecken. Prototypebezeichner wie `__proto__`/constructor/toString dürfen keine Aktions-/Fehler-Map umgehen. Null bleibt nur an ausdrücklich erlaubten Stellen zulässig. Doppelte Medien mit verschiedenen entryIds erlaubt; gleiche entryId, Positionslücken, fremde currentEntryId und ungepaarte Sourcefelder abweisen. Tief abgelöste Ausgabekopien erhalten.
 
 ## Ein konkreter Auftrag, höchstens vier Dateien
 

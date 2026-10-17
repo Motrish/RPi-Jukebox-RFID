@@ -72,7 +72,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 - Gesamte Sol-Familie ausschließlich Planung/Review; Luna schreibt alle ausführbaren Projektartefakte.
 - Astra vollständig ausgeschlossen, auch bei Eskalation.
-- Standard C plus ein aktiver Worker, Coding/Review seriell gemäß resource-policy.md; technische Höchstgrenze vier inklusive Koordinator.
+- Aktuell C plus ein bis zwei Worker für getrennte Aufgaben, nach Nutzervorgabe vom 17.10.2026; Coding/Review desselben Slices seriell gemäß resource-policy.md, technische Höchstgrenze vier inklusive Koordinator.
 - Genau ein Codeowner pro Datei/Änderungsserie; genau ein Besitzer pro Hardware-/Kontoresource.
 - V3-Basis und unveränderten Build früh herstellen, vor vollständiger gemischter Playerimplementierung.
 
@@ -226,3 +226,9 @@ Nächste serielle Arbeit: A02b-JavaScript-Vertragsgrenze anhand tatsächlicher P
 ### A02b1 gestartet
 
 Root hat die vier Dateigrenzen und gerichtete kanonische JS-Ausgabeverträglichkeit in a02b-js-seam-plan.md freigegeben. Ein Luna-Worker schreibt zuerst nur Jesttests, Corpus und Workflow; v1.js bleibt bis zum tatsächlichen CI-RED abwesend. Erst danach wird implementiert. Bestehende Pythonvalidatoren, 22 Tests, Fixturekeys, Gerätetransporte und GUIzustand bleiben erhalten. Keine Vollparitätsbehauptung für verlorene Floatlexeme/außerhalb JS darstellbare Werte. Code/Review weiter seriell, keine weiteren Worker.
+
+### Verfügbarkeit und erlaubte Parallelität
+
+Luna meldete zunächst ein Limit mit 2:55 PM als nächstem Versuch. Nach der neuen Nutzersteuerung zu mehr erlaubter Parallelität antwortete derselbe Worker tatsächlich wieder und setzt A02b1-Phase1 fort. Kein Modellwechsel zum Coden, kein enger Retryloop, kein Timer eingerichtet. Der Stage enthielt beim Checkpoint Baselinekopien; noch kein freigegebener Phase1-Freeze und v1.js bleibt ausstehend.
+
+Aktuell Root plus zwei unabhängige Worker: Luna für die drei A02b1-Test-/Fixture-/Workflowpfade, Sol ausschließlich für lesende I01-Bootstrapanalyse in eigener Prosa. Keine geteilten Schreibpfade; spätere Reviews des Codes bleiben seriell. Markdownlauf39019860723 fand nur MD050 im neuen A02b1-Plan: ein nicht als Code markierter Prototypname wurde als Fettschrift interpretiert; Root korrigiert diese Prosaformatierung.
