@@ -37,6 +37,10 @@ jobs:
       - name: Build Web App
         uses: ./.github/actions/build-webapp
 
+      - name: Test React library client and page
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --runTestsByPath src/components/DesignPreview/LibraryPage.test.js
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -65,11 +69,21 @@ jobs:
           --output-dir "${{ runner.temp }}/design-preview-react"
           --emit-preview-png-base64
 
+      - name: Test built React library against the real catalog in Chromium
+        timeout-minutes: 3
+        run: >-
+          python -u tests/design-preview/library_smoke.py
+          --serve-directory src/webapp/build
+          --output-dir "${{ runner.temp }}/design-preview-library"
+          --emit-library-png-base64
+
       - name: Upload browser screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: design-preview-react-browser-check
-          path: ${{ runner.temp }}/design-preview-react/
+          path: |
+            ${{ runner.temp }}/design-preview-react/
+            ${{ runner.temp }}/design-preview-library/
           if-no-files-found: ignore
           retention-days: 7
