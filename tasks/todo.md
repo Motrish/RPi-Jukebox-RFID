@@ -14,7 +14,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F04 | Zielgerät und Testressourcen festhalten | in_progress | Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs) bestätigt; OS-Release/Audio/Test-SD offen |
 | F05 | Designreferenz verfügbar machen | verified | Nutzerbild reference/template.webp am 17.10.2026 sichtbar; u01-design-spec.md |
 | A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
-| A02 | Verträge technisch verankern | in_progress | A02a verified/integrated bei 9f5f400 (PR 3), 22 lokale Tests/Lint und volle Pythonmatrix bestanden; A02b/Anschluss offen |
+| A02 | Verträge technisch verankern | in_progress | A02a und A02b1 verified/integrated: PR12 als ea87e4a7, 12 Jest-/22 Pythonvertragstests, vollständiger Web-/Chromiumpass und Pythonmatrix; Transport/Gesamtparität offen |
 | P01 | Lokalen Anbieter kapseln | in_progress | P01a1 verified als transportfreier Slice: 82d9547 reviewed, 25 Tests/Lint und volle CI erfolgreich, PR 9 als 1995a5c integriert; reale Session/Resolver/Hardware offen |
 | P02 | Quellenwechsel als Hardwareversuch | planned | Noch keine Produktumsetzung |
 | P03 | Playlist- und Queue-Speicherung | verified | Alle 15 Speicheraktionen, 36 Storetests + 22 Contracts, Python 3.9–3.13 und Review bestanden; PR 4/5/6 integriert, transportfreier Slice |
@@ -37,7 +37,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | B01 | Socketstatus und Fähigkeiten | in_progress | B01a bei fb2a7d0 reviewed, CI 38966180905 erfolgreich, PR 8 als 5057f0b integriert; 20 Tests, Modellprofile/Hardware/Runtime offen |
 | B02 | Begrenzte Energieaktionen | planned | Noch keine Produktumsetzung |
 | B03 | Hersteller-GUI unter Geräteadresse | planned | Noch keine Produktumsetzung |
-| I01 | Minimaler Setupzugang | planned | Noch keine Produktumsetzung |
+| I01 | Minimaler Setupzugang | in_progress | I01a lesender Slice verified/integrated: PR13 als87ee99b4, finales Folgereview und beide Pythonmatrices grün; LAN/Setup/Gerät offen |
 | I02 | Persistente Aufträge und privilegierter Worker | planned | Noch keine Produktumsetzung |
 | I03 | Audio-/RFID-Wizard als erster kompletter Pfad | planned | Noch keine Produktumsetzung |
 | I04 | Optionale Plugins im Wizard | planned | Noch keine Produktumsetzung |
@@ -232,3 +232,35 @@ Root hat die vier Dateigrenzen und gerichtete kanonische JS-Ausgabeverträglichk
 Luna meldete zunächst ein Limit mit 2:55 PM als nächstem Versuch. Nach der neuen Nutzersteuerung zu mehr erlaubter Parallelität antwortete derselbe Worker tatsächlich wieder und setzt A02b1-Phase1 fort. Kein Modellwechsel zum Coden, kein enger Retryloop, kein Timer eingerichtet. Der Stage enthielt beim Checkpoint Baselinekopien; noch kein freigegebener Phase1-Freeze und v1.js bleibt ausstehend.
 
 Aktuell Root plus zwei unabhängige Worker: Luna für die drei A02b1-Test-/Fixture-/Workflowpfade, Sol ausschließlich für lesende I01-Bootstrapanalyse in eigener Prosa. Keine geteilten Schreibpfade; spätere Reviews des Codes bleiben seriell. Markdownlauf39019860723 fand nur MD050 im neuen A02b1-Plan: ein nicht als Code markierter Prototypname wurde als Fettschrift interpretiert; Root korrigiert diese Prosaformatierung.
+
+### Wartung abgeschlossen und unabhängige I01a-Arbeit
+
+Der alte Lauf 39018216900 ist jetzt completed/cancelled. Isolierter Luna-Wartungsworkflow: Commit22239d3e, Lauf39026680909, Job117378929085 erfolgreich; Log bestätigt den Abbruchauftrag nach exakt geprüftem Branch/SHA. Anschließend Workflow entfernt und originaler vollständiger Basisbaum durch Cleanupcommit626b7722e8e799bdf20a5d7b26e39d67637d76a8 auf dem Wartungsbranch wiederhergestellt. Kein Wartungsworkflow im Produktbranch und kein weiterhin behaupteter Hänger. Frühere fehlende direkte Connector-Abbruchfunktion wurde durch diesen eng begrenzten repo-eigenen Wartungslauf aufgelöst.
+
+Dokumentationsfix ae58b975bd301d6d7189b399065105467472f3c3: alle abgefragten Markdown-/Python-/PHP-/CodeQL-Läufe erfolgreich, neue Inhalte zurückgelesen. I01-Quellanalyse ist abgeschlossen; vorhandener Upstreaminstaller mutiert vor dem Webzugang, weshalb I01a separat unprivilegiert liest. Luna implementiert die vier neuen, mit A02b disjunkten Dateien. Erster Rootlauf: acht stdlib-Tests erfolgreich, V3lint findet Komplexitäts-/Formatfehler; Markerfehler und lokale Host-/Originabgrenzung erhalten neue Regressionen vor finalem Freeze. Keine Geräte-/Installationsfreigabe.
+
+A02b1 Phase1 als 6aaebb2c8e29098b6caf3553c1f00da8e799b84b (Tree37fc61cde7e010089d01a9592a7cd8b771b4c206) in Draft-PR12 veröffentlicht; drei Test-/Fixture-/Workflowdateien, kein v1.js. Alle vier bisherigen Fixturekeys samt Werten identisch. Unabhängiges Testreview prüft vor Phase2 noch Datenerhaltung und strikte Randfälle; tatsächlicher CI-RED steht als nächster Check an.
+
+### Zwei getrennte Prüf- und Entwicklungslinien
+
+A02b1 Phase1 wurde nach unabhängigem Folgereview als 0508ef45f075976f4b0ab8a831c693fae8aa9a77 veröffentlicht (Tree f14fe36c529f291c68a6fbad5ebfef464efae304). Tatsächlicher Lauf39027441324/Job117381108372: CRA-Build erfolgreich, 22 unveränderte Pythonprüfungen erfolgreich, Jest scheitert ausdrücklich am fehlenden Modul ./v1. Die neuen Assertions prüfen Originalinput, Mutation und kanonische Ausgabe separat. Erst danach hat Root Luna Phase2 für ausschließlich v1.js freigegeben. Noch kein JS-GREEN oder Merge.
+
+I01a nach Regressionen unverändert als 04cf12d9c9f6cff4090d32a5b75946af9a824fc6 veröffentlicht, Tree315be0d79a79e6465ab4031febe1b8ff7157b656, Draft-PR13. Alle vier Inhalte identisch zurückgelesen. Root hat 10 stdlib-Tests, V3lint und den vom Autor dokumentierten Chromiumbefehl erneut erfolgreich ausgeführt: 11 Karten, null Seitenfehler, bei 390px kein horizontaler Überlauf. Desktop- und Mobilscreenshot tatsächlich angesehen. Unabhängiges Quellreview und Python-CI39027502923/39027505383 noch offen; Console-pytest-Collection wird ausdrücklich geprüft. Nur lesende lokale Vorprüfung, keine Installation oder Zielgerätefreigabe.
+
+I01a-Review fand P2 bei Console-pytest: der Repositoryroot fehlte vor dem Namespaceimport. Beide vollständigen Erstmatrices bestätigen ModuleNotFoundError installation. Luna hat ausschließlich den Testimport korrigiert. Folgehead9883657b61c34ba0dbe2ea279ec01d1a79ce236a, Treef88747f4d6834fa688cd4bd29782d36a94d5dc7d; Roottest mit echter pytest-Konsole 10/10 grün, V3lint grün, Remoteinhalt identisch. Folge-CI39027696042/39027699443 und enges Folgereview offen. Autorbericht aktuell unter phoniebox-staging/i01a/tasks/i01a-preflight-report.md; mechanisches Überschreiben der älteren lokalen Konzeptkopie meldete Dateizugriff verweigert, keine Rechteänderung vorgenommen. GitHub-Dokumentation wird den aktuellen eingefrorenen Stagebericht verwenden.
+
+A02b1 Phase2 wurde als77793a2364f06b6c405eb908aa6437e265c575c4 veröffentlicht, Treeccc1cebffc7eebc5a98a998151f1f9e2cf37c1f6. Unabhängiges Quellreview fand zwei P2: löchrige Arrays umgehen Elementprüfungen, akzeptiertes -0 ist nicht kanonisch. CI39027661137/117381723415 bestätigt 9 Jestprüfungen grün, 1 rot am bestehenden Rawnullfall. Luna korrigiert ausschließlich v1.js/v1.test.js mit gezielten Sparsearrayregressionen; keine Anpassung an Python, Fixture oder Workflow. Kein Merge und kein JS-GREEN behauptet.
+
+### I01a integriert, A02b1 gemeinsamer Abschlussstand
+
+I01a-Head9883657b61c34ba0dbe2ea279ec01d1a79ce236a ist nach unabhängigem Folgereview und vollständigem Erfolg beider Pythonmatrices39027696042/39027699443 (je3.9–3.13 plus finish) als87ee99b42d2debbaf4a1bea9264793c168f39f31 in future3/modern-ui integriert. Root hat den exakten Mergebaumf88747f4d6834fa688cd4bd29782d36a94d5dc7d bestätigt. Job117381822260 belegt152 bestandene Tests samt allen10 neuen Websetupprüfungen. Gesamt-I01 bleibt offen; verifiziert ist nur der lesende lokale Slice. Der durch Installationpfadänderungen ebenfalls ausgelöste bestehende ARMv7-Installerlauf39027503008 läuft beim Checkpoint noch und wird nicht als Pass oder ARMv6-Nachweis gewertet.
+
+A02b1-Fixes sind in18428caf43e461e287f6e3f14de0a241b562aee6 eingefroren, Tree314e7b057bd811f3b578e3791dc531b2c8e0755f. Mechanischer Zwei-Eltern-Commit erhält die neue I01a-Basis; alle acht A02b-/I01a-Dateien von Root identisch zurückgelesen. Unabhängiges enges Folgereview am exakten Head schließt Sparsearray-/Null-P2 ohne neuen Quellblocker. Root hat den unverändert dokumentierten Luna-Nodebefehl mit Exit0 wiederholt. Neuer Web-/Jest-/Chromiumlauf39027938090 und Pythonlauf39027938119 offen. Keine aktiven Worker, keine vorsorglichen Wiederholungen bestandener Tests; Root wartet auf echte Abschlussnachweise. develop wird nicht geändert.
+
+### A02b1 integriert – Abschluss dieses Prüfstands
+
+PR12 ist nach unabhängigem Folgereview und tatsächlichem vollständigem Erfolg am Head18428caf43e461e287f6e3f14de0a241b562aee6 als ea87e4a7e0a4a6f16119e440f8c797c45d866d0c integriert. Root hat den Mergebaum314e7b057bd811f3b578e3791dc531b2c8e0755f exakt bestätigt und develop unverändert bei42d5023e37dbf8de6477fef5ebcd6eae3cb5087d gelesen. Weblauf39027938090/Job117382516663: CRA-Build, 22 unveränderte Pythonvertragstests, 12 Jesttests mit Pythonoracle und alle6 Chromiumgruppen erfolgreich. Pythonlauf39027938119: alle fünf Versionen3.9–3.13 plus finish erfolgreich. A02b1 ist nur im beschriebenen kanonischen Writerbereich verified; Runtime/Transport und beliebige Raw-JSON-Parität bleiben offen.
+
+U03-Leseinventur hat fünf Quellen am18428caf geprüft: der vorhandene Ordnerhandler eignet sich wegen freier Pfade/Symlinks/Netzexpansion nicht für direkte Exposition. Ein neuer reiner Metadatenzwischenadapter ohne stabile libraryId wird noch nicht zum Coden freigegeben. Der nächste kleine Vertrag muss die tatsächliche Bibliotheksidentität, Rootauflösung und spätere autorisierte Lesegrenze zusammenführen, damit die GUI einen nutzbaren statt weiteren rein synthetischen Zwischenschritt bekommt. Keine neuen RPCmethoden oder Playerinstanzen freigegeben. Lesender Befund in u03-readonly-seam-plan.md; Livecontroller, Spotify und vollständiger Installer bleiben offene Produktarbeit.
+
+Alle Worker beendet; Root veröffentlicht den Dokumentationscheckpoint. Weitere OS-/Audio-/Test-SD-Angaben sind per Textfrage angefordert. Kein Modelllimit, Timer oder automatischer Wiederaufnahmeauftrag wird behauptet.
