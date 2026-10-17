@@ -56,7 +56,8 @@ test('does not request before code submission and renders duplicate titles by op
 test('shows an honest empty state and pages without a total count', async () => {
   fetchLibraryPage.mockResolvedValueOnce(page([], null)).mockResolvedValueOnce(page([
     item('lib_1', 'Titel.mp3'),
-  ], 'lib_1')).mockResolvedValueOnce(page([item('lib_2', 'Weiter.mp3')]));
+  ], 'lib_1')).mockResolvedValueOnce(page([item('lib_2', 'Weiter.mp3')]))
+    .mockResolvedValueOnce(page([item('lib_1', 'Titel.mp3')], 'lib_1'));
   openLibrary();
   expect(await screen.findByRole('heading', { name: /keine titel/i })).toBeInTheDocument();
   expect(screen.queryByRole('list', { name: 'Titel im Musikkatalog' })).not.toBeInTheDocument();

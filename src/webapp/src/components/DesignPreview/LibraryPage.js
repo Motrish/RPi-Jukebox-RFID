@@ -67,6 +67,7 @@ export default function LibraryPage() {
   }
 
   function forgetAccess(message = '') {
+    focusCodeInput.current = true;
     generation.current += 1;
     abortActiveRequest();
     setCode('');
@@ -76,7 +77,6 @@ export default function LibraryPage() {
     setPageIndex(0);
     setLoading(false);
     setErrorMessage(message);
-    focusCodeInput.current = true;
   }
 
   useEffect(() => {

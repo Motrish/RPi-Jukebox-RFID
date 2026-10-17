@@ -451,7 +451,7 @@ def run_controlled_browser_cases(context, servers, report):
 
     page = open_controlled_page(context, servers, "empty")
     try:
-        expect(page.get_by_text(re.compile("keine titel", re.I))).to_be_visible()
+        expect(page.get_by_role("heading", name=re.compile("keine titel", re.I))).to_be_visible()
         report["controlled_checks"].append("Fetch-controlled empty catalog")
     finally:
         page.close()
