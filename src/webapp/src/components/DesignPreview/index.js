@@ -195,11 +195,18 @@ function PreviewShell() {
 
   useEffect(() => {
     if (!menuOpen) return undefined;
-    const frame = window.requestAnimationFrame(() => {
+    let frame;
+    function focusVisibleRoute() {
+      const sidebar = document.getElementById('preview-sidebar');
       const activeLink = document.querySelector('#preview-sidebar .nav-item[aria-current="page"]');
       const firstLink = document.querySelector('#preview-sidebar .nav-item');
-      (activeLink || firstLink)?.focus();
-    });
+      const target = activeLink || firstLink;
+      const visible = sidebar && window.getComputedStyle(sidebar).visibility === 'visible'
+        && sidebar.getBoundingClientRect().left >= 0;
+      if (visible && target) target.focus();
+      else frame = window.requestAnimationFrame(focusVisibleRoute);
+    }
+    frame = window.requestAnimationFrame(focusVisibleRoute);
     return () => window.cancelAnimationFrame(frame);
   }, [menuOpen]);
 
