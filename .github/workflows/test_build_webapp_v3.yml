@@ -10,6 +10,7 @@ on:
     paths:
         - '.github/workflows/test_build_webapp_v3.yml'
         - '.github/actions/build-webapp/**'
+        - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
         - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
@@ -21,6 +22,7 @@ on:
     paths:
         - '.github/workflows/test_build_webapp_v3.yml'
         - '.github/actions/build-webapp/**'
+        - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
         - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
@@ -78,6 +80,25 @@ jobs:
           --output-dir "${{ runner.temp }}/design-preview-library"
           --emit-library-png-base64
 
+      - name: Download nginx binary without installing or starting a host service
+        run: |
+          sudo apt-get update
+          mkdir -p "${{ runner.temp }}/nginx-package"
+          cd "${{ runner.temp }}/nginx-package"
+          apt-get download nginx
+          package=$(find . -maxdepth 1 -name 'nginx_*.deb' -print -quit)
+          test -n "$package"
+          dpkg-deb -x "$package" extracted
+          test -x extracted/usr/sbin/nginx
+
+      - name: Test built React library through real loopback nginx
+        timeout-minutes: 3
+        run: >-
+          python -u tests/design-preview/nginx_library_smoke.py
+          --serve-directory src/webapp/build
+          --output-dir "${{ runner.temp }}/design-preview-nginx-library"
+          --nginx-binary "${{ runner.temp }}/nginx-package/extracted/usr/sbin/nginx"
+
       - name: Upload browser screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,5 +107,6 @@ jobs:
           path: |
             ${{ runner.temp }}/design-preview-react/
             ${{ runner.temp }}/design-preview-library/
+            ${{ runner.temp }}/design-preview-nginx-library/
           if-no-files-found: ignore
           retention-days: 7
