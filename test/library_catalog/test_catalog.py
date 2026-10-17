@@ -133,6 +133,23 @@ class LibraryCatalogTests(unittest.TestCase):
         )
         self.assertIsNone(self.catalog.resolve(first["libraryId"]))
 
+    def test_missing_register_tombstones_the_old_id_before_rejecting(self):
+        item = self.register("album/song.mp3")
+        album = self.root / "album"
+        moved_album = self.root / "album-moved"
+        album.rename(moved_album)
+
+        with self.assertRaises(CatalogError) as caught:
+            self.catalog.register_file("album/song.mp3")
+        self.assertEqual(caught.exception.safe.code, "MEDIA_UNAVAILABLE")
+
+        moved_album.rename(album)
+        old_record = self.catalog.get_media(item["libraryId"])
+        self.assertEqual(old_record["availability"], "MISSING")
+        self.assertIsNone(self.catalog.resolve(item["libraryId"]))
+        replacement = self.catalog.register_file("album/song.mp3")
+        self.assertNotEqual(item["libraryId"], replacement["libraryId"])
+
     def test_missing_file_is_a_persistent_tombstone(self):
         item = self.register("gone.mp3")
         (self.root / "gone.mp3").unlink()
@@ -219,6 +236,32 @@ class LibraryCatalogTests(unittest.TestCase):
                 library_root=self.root,
             )
         self.assertEqual(future_database.read_bytes(), original_bytes)
+
+    def test_view_only_database_is_rejected_without_mutation(self):
+        database = Path(self._temp.name) / "view-only.sqlite3"
+        connection = sqlite3.connect(str(database))
+        try:
+            connection.execute("CREATE VIEW foreign_view AS SELECT 1 AS value")
+            connection.commit()
+        finally:
+            connection.close()
+        original_bytes = database.read_bytes()
+
+        unexpected_catalog = None
+        try:
+            try:
+                unexpected_catalog = LibraryCatalog(
+                    database_path=database,
+                    library_root=self.root,
+                )
+            except CatalogError as error:
+                self.assertEqual(error.safe.code, "STORE_UNAVAILABLE")
+            else:
+                self.fail("view-only foreign database was accepted")
+        finally:
+            if unexpected_catalog is not None:
+                unexpected_catalog.close()
+        self.assertEqual(database.read_bytes(), original_bytes)
 
     def test_unknown_valid_id_returns_none(self):
         self.assertIsNone(self.catalog.get_media("lib_" + "0" * 32))
