@@ -143,6 +143,7 @@ jobs:
         with:
           artifact-ids: ${{ steps.upload-web-bundle.outputs.artifact-id }}
           path: ${{ runner.temp }}/web-bundle-download
+          merge-multiple: true
 
       - name: Verify downloaded web bundle
         timeout-minutes: 2
