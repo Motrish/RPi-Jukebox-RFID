@@ -10,6 +10,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import socket
 import subprocess
@@ -17,6 +18,9 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+from unittest import mock
 from urllib.parse import urlsplit
 
 STAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -25,6 +29,10 @@ sys.path.insert(0, str(STAGE_ROOT))
 # Keep this import unconditional: publishing the phase-one tests must expose a
 # missing launcher as a real collection error, never as a skip or fallback.
 launch = importlib.import_module("installation.websetup.launch")  # noqa: E402,F401
+
+# Narrow product-test seam: launch.run(argv, *, make_server_factory,
+# popen_factory) returns an exit status. Every listener/process creation must
+# pass through those factories; bundle.staged_bundle remains real and unpatched.
 
 
 def free_port():
@@ -69,27 +77,39 @@ class LauncherCliTests(unittest.TestCase):
 
     def test_rejects_unknown_options_and_invalid_ports(self):
         with tempfile.TemporaryDirectory() as temporary:
+            base = self.base_args(temporary)
             for extra in (["--document-root", temporary], ["--upstream", "127.0.0.1:1"],
                           ["--port", "80"], ["--port", "65536"], ["--port", "no"]):
-                result = run_cli(self.base_args(temporary) + extra)
+                result = run_cli(base + extra)
                 self.assertNotEqual(result.returncode, 0, extra)
                 self.assertNotIn("Traceback", result.stderr)
 
     def test_invalid_bundle_fails_before_requested_listener(self):
         with tempfile.TemporaryDirectory() as temporary:
-            archive = Path(temporary) / "bad.tar.gz"
-            manifest = Path(temporary) / "bad.json"
-            archive.write_bytes(b"not a bundle")
-            manifest.write_text("{}", encoding="utf-8")
+            archive, manifest = self.make_bundle(temporary)
+            archive.write_bytes(archive.read_bytes()[:-1] + bytes([archive.read_bytes()[-1] ^ 1]))
             port = free_port()
-            result = run_cli(["--archive", str(archive), "--manifest", str(manifest),
-                              "--repository", "Motrish/RPi-Jukebox-RFID",
-                              "--commit", "a" * 40, "--port", str(port)])
-            self.assertNotEqual(result.returncode, 0)
-            combined = result.stdout + result.stderr
-            self.assertNotIn("Traceback", combined)
-            self.assertNotIn(str(archive), combined)
-            self.assertNotIn("not a bundle", combined)
+            arguments = ["--archive", str(archive), "--manifest", str(manifest),
+                         "--repository", "Motrish/RPi-Jukebox-RFID", "--commit", "a" * 40,
+                         "--port", str(port)]
+            calls = []
+
+            def forbidden_listener(*_args, **_kwargs):
+                calls.append(True)
+                raise AssertionError("listener/process factory called before invalid bundle rejection")
+
+            from installation.websetup import bundle
+            captured_stdout = StringIO()
+            captured_stderr = StringIO()
+            with mock.patch.object(bundle, "staged_bundle", wraps=bundle.staged_bundle) as intake:
+                with redirect_stdout(captured_stdout), redirect_stderr(captured_stderr):
+                    result = launch.run(arguments, make_server_factory=forbidden_listener,
+                                        popen_factory=forbidden_listener)
+            self.assertNotEqual(result, 0)
+            self.assertEqual(intake.call_count, 1)
+            self.assertEqual(calls, [])
+            self.assertNotIn("Traceback", captured_stdout.getvalue() + captured_stderr.getvalue())
+            self.assertNotIn(str(archive), captured_stdout.getvalue() + captured_stderr.getvalue())
             with socket.socket() as probe:
                 self.assertNotEqual(probe.connect_ex(("127.0.0.1", port)), 0)
 
@@ -151,6 +171,8 @@ class LauncherCliTests(unittest.TestCase):
 def raw_http(port, target, headers=(), method="GET"):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
     connection.putrequest(method, target, skip_host=True)
+    if not any(name.lower() == "host" for name, _value in headers):
+        connection.putheader("Host", "127.0.0.1:{}".format(port))
     for name, value in headers:
         connection.putheader(name, value)
     connection.endheaders()
@@ -161,17 +183,21 @@ def raw_http(port, target, headers=(), method="GET"):
 
 
 def wait_for_ready(process, port, deadline):
+    output = []
+    expected_urls = ("http://127.0.0.1:{}/setup/".format(port), "/#/design-preview")
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise AssertionError("launcher exited before readiness")
-        try:
-            status, _headers, _body = raw_http(port, "/")
-            if status < 500:
-                return
-        except OSError:
-            pass
-        time.sleep(0.05)
-    raise AssertionError("launcher did not become ready before deadline")
+        readable, _writable, _exceptional = select.select([process.stdout], [], [], 0.05)
+        if readable:
+            chunk = os.read(process.stdout.fileno(), 4096).decode("utf-8", errors="replace")
+            if chunk:
+                output.append(chunk)
+        if all(value in "".join(output) for value in expected_urls):
+            status, _headers, _body = raw_http(port, "/setup/", [("Host", "127.0.0.1:{}".format(port))])
+            if status == 200:
+                return "".join(output)
+    raise AssertionError("launcher did not publish both ready URLs and serve setup before deadline")
 
 
 def verify_http_matrix(port):
@@ -190,10 +216,14 @@ def verify_http_matrix(port):
                             ("Origin", "http://" + good)], "GET", (400, 403)),
         ("/api/preflight?probe=1", [("Host", good)], "GET", (400, 404)),
         ("/unknown-api", [("Host", good)], "GET", (400, 404)),
+        ("/api/unknown", [("Host", good)], "GET", (400, 404)),
         ("/admin", [("Host", good)], "GET", (400, 404)),
         ("/rpc", [("Host", good)], "GET", (400, 404)),
         ("/ws", [("Host", good)], "GET", (400, 404)),
         ("/logs", [("Host", good)], "GET", (400, 404)),
+        ("/setup", [("Host", good)], "GET", (400, 404)),
+        ("/setup/unknown", [("Host", good)], "GET", (400, 404)),
+        ("http://{}:{}/api/preflight".format("127.0.0.1", port), [("Host", good)], "GET", (400, 404)),
         ("/setup/", [("Host", good)], "POST", (405,)),
         ("/../etc/passwd", [("Host", good)], "GET", (400, 404)),
         ("/%2e%2e/etc/passwd", [("Host", good)], "GET", (400, 404)),
@@ -202,66 +232,94 @@ def verify_http_matrix(port):
         status, _response_headers, body = raw_http(port, target, headers, method)
         if status not in accepted:
             raise AssertionError("unexpected HTTP status for {}: {}".format(target, status))
-        if target.startswith(("/unknown", "/admin")) and b"<html" in body.lower():
-            raise AssertionError("unknown route returned SPA HTML")
+        reject_spa = target.startswith(("/unknown", "/api/unknown", "/admin", "/rpc", "/ws", "/logs", "/setup"))
+        reject_spa = reject_spa or target.startswith("http://")
+        if reject_spa and status >= 400:
+            if status < 400:
+                raise AssertionError("forbidden route returned a success response: {}".format(target))
+            if b"<html" in body.lower():
+                raise AssertionError("forbidden route returned SPA HTML: {}".format(target))
         if target == "/api/preflight" and status == 200:
             payload = json.loads(body)
             if payload.get("schema") != "websetup.preflight.v1" or "facts" not in payload:
                 raise AssertionError("preflight response did not contain I01a facts")
 
 
-def verify_browser(port, output):
+def browser_route(route, origin, observed, blocked):
+    parsed = urlsplit(route.request.url)
+    same_origin = "{}://{}".format(parsed.scheme, parsed.netloc) == origin
+    allowed_paths = {
+        "/setup/", "/api/preflight", "/", "/index.html", "/favicon.ico",
+        "/logo192.png", "/manifest.json", "/locales/de/translation.json",
+        "/locales/en/translation.json",
+    }
+    allowed = same_origin and route.request.method == "GET" and not parsed.query and (
+        parsed.path in allowed_paths or parsed.path.startswith("/static/"))
+    if allowed:
+        observed.append(parsed.path)
+        route.continue_()
+    else:
+        blocked.append(parsed.scheme + "://" + parsed.netloc + parsed.path[:100])
+        route.abort()
+
+
+def observe_preflight(response, args, output, api_reports):
+    if urlsplit(response.url).path != "/api/preflight":
+        return
+    payload = response.json()
+    if response.status != 200 or payload.get("schema") != "websetup.preflight.v1":
+        raise AssertionError("browser received an invalid I01a response")
+    if not isinstance(payload.get("facts"), dict) or not payload["facts"]:
+        raise AssertionError("browser received no redacted I01a facts")
+    serialized = json.dumps(payload, sort_keys=True)
+    private_values = (str(Path(args.archive).resolve()), str(Path(args.manifest).resolve()),
+                      str(output.resolve()), "foreign-sentinel.txt")
+    if any(value in serialized for value in private_values):
+        raise AssertionError("I01a response exposed private test data")
+    api_reports.append(payload)
+
+
+def verify_browser(args, port, output):
     from playwright.sync_api import sync_playwright
 
-    observed = []
-    blocked = []
-    page_errors = []
-    static_mimes = []
+    observed, blocked, page_errors, static_mimes, api_reports = [], [], [], [], []
     origin = "http://127.0.0.1:{}".format(port)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context()
         context.add_init_script("Object.defineProperty(navigator, 'language', {get: () => 'de'});"
                                 "Object.defineProperty(navigator, 'languages', {get: () => ['de','en']});")
-
-        def route_request(route):
-            parsed = urlsplit(route.request.url)
-            same = "{}://{}".format(parsed.scheme, parsed.netloc) == origin
-            allowed = same and route.request.method == "GET" and not parsed.query and (
-                parsed.path in ("/", "/index.html", "/favicon.ico", "/logo192.png", "/manifest.json",
-                                "/locales/de/translation.json", "/locales/en/translation.json")
-                or same and route.request.method == "GET" and parsed.path.startswith("/static/"))
-            if allowed:
-                observed.append(parsed.path)
-                route.continue_()
-            else:
-                blocked.append(parsed.scheme + "://" + parsed.netloc + parsed.path[:100])
-                route.abort()
-
-        context.route("**/*", route_request)
+        context.route("**/*", lambda route: browser_route(route, origin, observed, blocked))
         page = context.new_page()
         page.on("pageerror", lambda error: page_errors.append(type(error).__name__))
         page.on("response", lambda response: static_mimes.append(
             (urlsplit(response.url).path, response.headers.get("content-type", ""))
         ) if "/static/" in urlsplit(response.url).path else None)
-        page.goto(origin + "/setup/", wait_until="networkidle", timeout=10000)
-        if page.locator("body").inner_text().strip() == "":
-            raise AssertionError("I01a setup page rendered no content")
-        page.get_by_text("Systemdaten", exact=False).wait_for(timeout=5000)
-        page.goto(origin + "/#/design-preview", wait_until="networkidle", timeout=10000)
-        if page.locator("#root").evaluate("element => element.children.length") < 1:
-            raise AssertionError("React design-preview route rendered an empty root")
-        if blocked or page_errors:
-            raise AssertionError("browser blocked requests or errors: {} {}".format(blocked, page_errors))
-        if not observed:
-            raise AssertionError("browser did not load same-origin bundle assets")
-        if "/api/preflight" not in observed:
-            raise AssertionError("browser did not fetch the redacted I01a report")
-        if not any(path.endswith(".js") and "javascript" in mime for path, mime in static_mimes):
-            raise AssertionError("React JavaScript asset had no JavaScript MIME type")
-        page.screenshot(path=str(output / "bootstrap-browser.png"), full_page=True)
+        page.on("response", lambda response: observe_preflight(response, args, output, api_reports))
+        verify_browser_routes(page, origin, output, observed, blocked, page_errors, static_mimes, api_reports)
         browser.close()
     return len(observed)
+
+
+def verify_browser_routes(page, origin, output, observed, blocked, page_errors, static_mimes, api_reports):
+    page.goto(origin + "/setup/", wait_until="networkidle", timeout=10000)
+    if page.locator("body").inner_text().strip() == "":
+        raise AssertionError("I01a setup page rendered no content")
+    loaded_state = "Systemdaten wurden schreibgeschützt geladen."
+    page.locator("#state").get_by_text(loaded_state, exact=True).wait_for(timeout=5000)
+    if page.locator(".fact").count() < 1 or not api_reports:
+        raise AssertionError("browser did not render the successfully fetched I01a facts")
+    page.goto(origin + "/#/design-preview", wait_until="networkidle", timeout=10000)
+    if page.locator("#root").evaluate("element => element.children.length") < 1:
+        raise AssertionError("React design-preview route rendered an empty root")
+    if blocked or page_errors:
+        raise AssertionError("browser blocked requests or errors: {} {}".format(blocked, page_errors))
+    if "/api/preflight" not in observed or not any(path.startswith("/static/") for path in observed):
+        raise AssertionError("browser did not fetch setup facts and same-origin React assets")
+    has_javascript_mime = any(path.endswith(".js") and "javascript" in mime for path, mime in static_mimes)
+    if not has_javascript_mime:
+        raise AssertionError("React JavaScript asset had no JavaScript MIME type")
+    page.screenshot(path=str(output / "bootstrap-browser.png"), full_page=True)
 
 
 def launcher_command(args, port):
@@ -289,25 +347,143 @@ def process_descendants(pid):
     return found
 
 
+def owned_process_ids(process):
+    return [process.pid] + process_descendants(process.pid)
+
+
+def process_group_members(group_id):
+    result = subprocess.run(["ps", "-eo", "pid=,pgid="], text=True, capture_output=True,
+                            timeout=3, check=True)
+    return [int(pid) for pid, pgid in (line.split() for line in result.stdout.splitlines())
+            if int(pgid) == group_id]
+
+
+def loopback_listeners_for(process):
+    owners = {}
+    for pid in owned_process_ids(process):
+        try:
+            descriptors = Path("/proc/{}/fd".format(pid)).iterdir()
+            for descriptor in descriptors:
+                try:
+                    target = os.readlink(descriptor)
+                except OSError:
+                    continue
+                if target.startswith("socket:[") and target.endswith("]"):
+                    owners.setdefault(target[8:-1], set()).add(pid)
+        except OSError:
+            continue
+    result = set()
+    with open("/proc/net/tcp", encoding="ascii") as table:
+        next(table)
+        for line in table:
+            fields = line.split()
+            local_address, state, inode = fields[1], fields[3], fields[9]
+            if state != "0A" or inode not in owners:
+                continue
+            address_hex, port_hex = local_address.split(":")
+            address = socket.inet_ntoa(bytes.fromhex(address_hex)[::-1])
+            if address.startswith("127."):
+                for pid in owners[inode]:
+                    result.add((pid, address, int(port_hex, 16), inode))
+    return result
+
+
+def all_tcp_listener_inodes():
+    inodes = set()
+    for table_name in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(table_name, encoding="ascii") as table:
+                next(table)
+                for line in table:
+                    fields = line.split()
+                    if fields[3] == "0A":
+                        inodes.add(fields[9])
+        except OSError:
+            continue
+    return inodes
+
+
+def pid_is_running(pid):
+    try:
+        stat = Path("/proc/{}/stat".format(pid)).read_text(encoding="ascii")
+    except OSError:
+        return False
+    return stat.rsplit(")", 1)[-1].strip().split()[0] != "Z"
+
+
+def signal_process(process, signum, whole_group):
+    try:
+        if whole_group:
+            os.killpg(process.pid, signum)
+        else:
+            process.send_signal(signum)
+    except ProcessLookupError:
+        pass
+
+
+def communicate_with_escalation(process):
+    try:
+        return process.communicate(timeout=6)
+    except subprocess.TimeoutExpired:
+        signal_process(process, signal.SIGTERM, whole_group=True)
+    try:
+        return process.communicate(timeout=2)
+    except subprocess.TimeoutExpired:
+        signal_process(process, signal.SIGKILL, whole_group=True)
+        return process.communicate(timeout=2)
+
+
+def wait_for_pids(known_pids, seconds):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end and any(pid_is_running(pid) for pid in known_pids):
+        time.sleep(0.05)
+    return [pid for pid in known_pids if pid_is_running(pid)]
+
+
+def finish_owned_process(process, known_pids, signum=None, whole_group=False):
+    group_members = process_group_members(process.pid)
+    known_pids = sorted(set(known_pids).union(group_members))
+    if whole_group:
+        signal_process(process, signum or signal.SIGTERM, whole_group=True)
+    elif process.poll() is None:
+        signal_process(process, signum or signal.SIGTERM, whole_group)
+    stdout, stderr = communicate_with_escalation(process)
+    survivors = wait_for_pids(known_pids, 2)
+    if survivors:
+        signal_process(process, signal.SIGKILL, whole_group=True)
+        wait_for_pids(survivors, 2)
+    return stdout or "", stderr or "", survivors
+
+
+def assert_listeners_gone(snapshot):
+    expected = {item[3] for item in snapshot}
+    if expected.intersection(all_tcp_listener_inodes()):
+        raise AssertionError("an owned loopback listener remained after launcher exit")
+
+
 def verify_signal_cleanup(args, output, private_parent, signum):
     port = free_port()
     process = subprocess.Popen(launcher_command(args, port), cwd=output,
                                env=dict(os.environ, TMPDIR=str(private_parent)),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, start_new_session=True)
-    wait_for_ready(process, port, time.monotonic() + 15)
-    if signum == signal.SIGINT:
-        os.killpg(process.pid, signum)
-    else:
-        process.send_signal(signum)
-    process.communicate(timeout=8)
-    if process.returncode != 0:
-        raise AssertionError("launcher did not stop cleanly for signal {}".format(signum))
-    with socket.socket() as probe:
-        if probe.connect_ex(("127.0.0.1", port)) == 0:
-            raise AssertionError("launcher listener remained after signal shutdown")
-    if list(private_parent.iterdir()):
-        raise AssertionError("signal shutdown leaked private files")
+    known_pids = [process.pid]
+    listeners = set()
+    try:
+        wait_for_ready(process, port, time.monotonic() + 15)
+        known_pids = owned_process_ids(process)
+        listeners = loopback_listeners_for(process)
+        if not any(item[2] == port for item in listeners) or not any(item[2] != port for item in listeners):
+            raise AssertionError("launcher did not own both nginx and preflight loopback listeners")
+        _stdout, _stderr, survivors = finish_owned_process(
+            process, known_pids, signum=signum, whole_group=(signum == signal.SIGINT))
+        if process.returncode != 0 or survivors:
+            raise AssertionError("launcher did not stop cleanly for signal {}".format(signum))
+        if list(private_parent.iterdir()):
+            raise AssertionError("signal shutdown leaked private files")
+        assert_listeners_gone(listeners)
+    finally:
+        _stdout, _stderr, _survivors = finish_owned_process(process, known_pids, whole_group=True)
 
 
 def verify_nginx_child_exit(args, output, private_parent):
@@ -316,19 +492,145 @@ def verify_nginx_child_exit(args, output, private_parent):
                                env=dict(os.environ, TMPDIR=str(private_parent)),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, start_new_session=True)
-    wait_for_ready(process, port, time.monotonic() + 15)
-    children = process_descendants(process.pid)
-    if not children:
-        raise AssertionError("launcher had no owned nginx child to stop in the fixture")
-    os.kill(children[-1], signal.SIGKILL)
-    process.communicate(timeout=8)
-    if process.returncode == 0:
-        raise AssertionError("launcher did not report unexpected nginx exit")
+    known_pids = [process.pid]
+    listeners = set()
+    try:
+        wait_for_ready(process, port, time.monotonic() + 15)
+        known_pids = owned_process_ids(process)
+        listeners = loopback_listeners_for(process)
+        nginx_pids = [item[0] for item in listeners if item[2] == port and item[0] != process.pid]
+        if not nginx_pids:
+            raise AssertionError("could not identify the owned nginx listener process")
+        os.kill(nginx_pids[0], signal.SIGKILL)
+        deadline = time.monotonic() + 8
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if process.poll() is None:
+            raise AssertionError("launcher did not notice its nginx child exit before deadline")
+        _stdout, _stderr, survivors = finish_owned_process(process, known_pids)
+        if process.returncode == 0 or survivors:
+            raise AssertionError("launcher did not stop after unexpected nginx exit")
+        if list(private_parent.iterdir()):
+            raise AssertionError("nginx child exit leaked private files")
+        assert_listeners_gone(listeners)
+    finally:
+        _stdout, _stderr, _survivors = finish_owned_process(process, known_pids, whole_group=True)
+
+
+def verify_real_nginx_port_collision(args, output, private_parent):
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        result = subprocess.run(
+            launcher_command(args, port), cwd=output,
+            env=dict(os.environ, TMPDIR=str(private_parent)),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=12, check=False,
+        )
+        if result.returncode == 0:
+            raise AssertionError("real nginx launcher adopted an occupied loopback port")
+        if "Traceback" in result.stdout + result.stderr:
+            raise AssertionError("real nginx port collision printed a traceback")
+        probe = socket.create_connection(("127.0.0.1", port), timeout=1)
+        probe.close()
+    if list(private_parent.iterdir()):
+        raise AssertionError("real nginx port collision leaked private files")
+
+
+def verify_quoted_temp_path(args, output):
+    private_parent = output / "private ' path with spaces"
+    private_parent.mkdir(mode=0o700)
+    port = free_port()
+    process = subprocess.Popen(launcher_command(args, port), cwd=output,
+                               env=dict(os.environ, TMPDIR=str(private_parent)),
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
+    known_pids = [process.pid]
+    listeners = set()
+    ready_output = ""
+    try:
+        try:
+            ready_output = wait_for_ready(process, port, time.monotonic() + 15)
+            ready = True
+        except AssertionError:
+            ready = False
+        known_pids = owned_process_ids(process)
+        listeners = loopback_listeners_for(process)
+        if ready:
+            _stdout, _stderr, survivors = finish_owned_process(
+                process, known_pids, signum=signal.SIGTERM)
+            if process.returncode != 0 or survivors:
+                raise AssertionError("quoted private path did not shut down cleanly")
+        else:
+            if process.poll() is None or process.returncode == 0:
+                raise AssertionError("quoted path was neither served nor rejected promptly")
+            if listeners:
+                raise AssertionError("quoted path was rejected after opening a listener")
+        if list(private_parent.iterdir()):
+            raise AssertionError("quoted-path launch leaked private files")
+        assert_listeners_gone(listeners)
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                raise AssertionError("quoted-path launch left its outer listener behind")
+    finally:
+        stdout, stderr, _survivors = finish_owned_process(process, known_pids, whole_group=True)
+        if str(private_parent) in ready_output + stdout + stderr:
+            raise AssertionError("quoted-path launch exposed its private path")
+
+
+def run_primary_acceptance(args, output, process, port, checks):
+    ready_output = wait_for_ready(process, port, time.monotonic() + 15)
+    checks.append("flushed setup and React URLs precede successful setup response")
+    listeners = loopback_listeners_for(process)
+    if not any(item[2] == port for item in listeners):
+        raise AssertionError("actual nginx listener is not owned by the launcher process tree")
+    if not any(item[2] != port for item in listeners):
+        raise AssertionError("I01a upstream listener is not owned by the launcher process tree")
+    checks.append("owned nginx and in-process I01a listeners observed")
+    verify_http_matrix(port)
+    checks.append("strict Host/Origin, method, traversal and unknown-route HTTP matrix")
+    browser_requests = verify_browser(args, port, output)
+    checks.append("Chromium setup facts, React preview, same-origin requests, no page errors")
+    return ready_output, listeners, browser_requests
+
+
+def verify_primary_shutdown(args, output, private_parent, archive_bytes, manifest_bytes,
+                            sentinel, process, known_pids, listeners, ready_output, port):
+    stdout, stderr, survivors = finish_owned_process(
+        process, known_pids, signum=signal.SIGTERM)
+    if process.returncode != 0 or survivors:
+        raise AssertionError("launcher did not stop its owned processes cleanly on SIGTERM")
+    expected_setup = "http://127.0.0.1:{}/setup/".format(port)
+    if expected_setup not in ready_output or "/#/design-preview" not in ready_output:
+        raise AssertionError("launcher did not publish both ready URLs before readiness")
+    combined_output = ready_output + stdout + stderr
+    private_paths = (str(Path(args.archive).resolve()), str(Path(args.manifest).resolve()), str(output))
+    if any(path in combined_output for path in private_paths):
+        raise AssertionError("launcher printed a private filesystem path")
+    if sentinel.read_bytes() != b"leave this file alone":
+        raise AssertionError("launcher changed a foreign sentinel")
+    if list(private_parent.iterdir()):
+        raise AssertionError("launcher left private stage or nginx files behind")
+    if Path(args.archive).read_bytes() != archive_bytes or Path(args.manifest).read_bytes() != manifest_bytes:
+        raise AssertionError("launcher changed caller bundle inputs")
+    assert_listeners_gone(listeners)
     with socket.socket() as probe:
         if probe.connect_ex(("127.0.0.1", port)) == 0:
-            raise AssertionError("preflight listener remained after nginx exit")
-    if list(private_parent.iterdir()):
-        raise AssertionError("nginx child exit leaked private files")
+            raise AssertionError("launcher listener remained after shutdown")
+
+
+def run_lifecycle_acceptance(args, output, private_parent, checks):
+    verify_real_nginx_port_collision(args, output, private_parent)
+    checks.append("real nginx rejected an occupied port without affecting its owner")
+    verify_signal_cleanup(args, output, private_parent, signal.SIGINT)
+    checks.append("Ctrl-C stopped owned process and both listeners")
+    verify_signal_cleanup(args, output, private_parent, signal.SIGTERM)
+    checks.append("SIGTERM stopped owned process and both listeners")
+    verify_nginx_child_exit(args, output, private_parent)
+    checks.append("unexpected nginx exit stopped launcher and I01a listener")
+    verify_quoted_temp_path(args, output)
+    checks.append("quoted private path safely served or failed before opening listeners")
 
 
 def integration(args):
@@ -348,48 +650,37 @@ def integration(args):
     manifest_bytes = Path(args.manifest).read_bytes()
     port = free_port()
     child_env = dict(os.environ, TMPDIR=str(private_parent))
-    process = subprocess.Popen(launcher_command(args, port), cwd=output, env=child_env, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True, start_new_session=True)
-    checks = []
-    captured = ""
-    captured_stderr = ""
     try:
-        wait_for_ready(process, port, time.monotonic() + 15)
-        checks.append("own launcher readiness")
-        verify_http_matrix(port)
-        checks.append("strict Host/Origin, method, traversal and unknown-route HTTP matrix")
-        browser_requests = verify_browser(port, output)
-        checks.append("Chromium setup facts, React preview, same-origin requests, no page errors")
+        process = subprocess.Popen(launcher_command(args, port), cwd=output, env=child_env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+    except Exception as error:
+        failure = {"status": "FAIL", "checks": [], "failure_type": type(error).__name__,
+                   "failure_summary": "bootstrap acceptance could not start"}
+        (output / "report.json").write_text(json.dumps(failure, indent=2), encoding="utf-8")
+        raise
+    checks = []
+    known_pids = [process.pid]
+    main_finished = False
+    try:
+        ready_output, listeners, browser_requests = run_primary_acceptance(
+            args, output, process, port, checks)
+        known_pids = owned_process_ids(process)
+        verify_primary_shutdown(args, output, private_parent, archive_bytes, manifest_bytes,
+                                sentinel, process, known_pids, listeners, ready_output, port)
+        main_finished = True
+        checks.append("SIGTERM stopped both owned listeners and preserved inputs/sentinel")
+        run_lifecycle_acceptance(args, output, private_parent, checks)
         report = {"status": "PASS", "checks": checks, "browser_requests": browser_requests}
         (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception as error:
+        failure = {"status": "FAIL", "checks": checks,
+                   "failure_type": type(error).__name__, "failure_summary": "bootstrap acceptance failed"}
+        (output / "report.json").write_text(json.dumps(failure, indent=2), encoding="utf-8")
+        raise
     finally:
-        if process.poll() is None:
-            process.send_signal(signal.SIGTERM)
-            try:
-                captured, captured_stderr = process.communicate(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                captured, captured_stderr = process.communicate(timeout=2)
-    if process.returncode != 0:
-        raise AssertionError("launcher did not stop cleanly on SIGTERM")
-    if "http://127.0.0.1:{}/setup/".format(port) not in captured or "/#/design-preview" not in captured:
-        raise AssertionError("launcher did not print both ready URLs")
-    combined_output = captured + captured_stderr
-    for private_path in (str(Path(args.archive).resolve()), str(Path(args.manifest).resolve()), str(output)):
-        if private_path in combined_output:
-            raise AssertionError("launcher printed a private filesystem path")
-    if sentinel.read_bytes() != b"leave this file alone":
-        raise AssertionError("launcher changed a foreign sentinel")
-    if list(private_parent.iterdir()):
-        raise AssertionError("launcher left private stage or nginx files behind")
-    if Path(args.archive).read_bytes() != archive_bytes or Path(args.manifest).read_bytes() != manifest_bytes:
-        raise AssertionError("launcher changed caller bundle inputs")
-    with socket.socket() as probe:
-        if probe.connect_ex(("127.0.0.1", port)) == 0:
-            raise AssertionError("launcher listener remained after shutdown")
-    verify_signal_cleanup(args, output, private_parent, signal.SIGINT)
-    verify_signal_cleanup(args, output, private_parent, signal.SIGTERM)
-    verify_nginx_child_exit(args, output, private_parent)
+        if not main_finished:
+            _stdout, _stderr, _survivors = finish_owned_process(process, known_pids, whole_group=True)
 
 
 def main():
