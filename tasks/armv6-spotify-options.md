@@ -1,6 +1,6 @@
 # Spotify auf dem Raspberry Pi Zero W (ARMv6): Optionen und Nachweisgrenzen
 
-Stand: 2026-10-16. Zielgerät ist ausschließlich der bestätigte originale Raspberry Pi Zero W (ARMv6), Raspberry Pi OS Lite 32-bit und PiSugar 2 (2-LED). ARMv7, AArch64 und x86_64 als Laufzeitgeräte sind ausgeschlossen.
+Stand: 2026-10-17. Zielgerät ist ausschließlich der bestätigte originale Raspberry Pi Zero W (ARMv6), Raspberry Pi OS Lite 32-bit und PiSugar 2 (2-LED). ARMv7, AArch64 und x86_64 als Laufzeitgeräte sind ausgeschlossen.
 
 ## Empfehlung
 
@@ -34,7 +34,7 @@ Das korrekte offizielle Repository ist [dtcooper/raspotify](https://github.com/d
 
 ## Kleinster aussagekräftiger Geräteversuch
 
-1. Auf externem Runner mit dem gepinnten librespot-Commit und dessen ARMv6HF-Dockerrezept ein ARMv6-Artefakt erzeugen. Das Buildprotokoll muss Rust 1.85, das Target `arm-unknown-linux-gnueabihf`, aktivierte Features und Linker-/Bibliotheksabhängigkeiten festhalten.
+1. Auf externem Runner mit dem gepinnten librespot-Commit, tatsächlich gültiger Featureauswahl und geprüftem Raspbian-ARMv6-Sysroot ein ARMv6-Artefakt erzeugen; das alte Dockerrezept bleibt nur Quellreferenz. Das Buildprotokoll muss Rust 1.85, das Target `arm-unknown-linux-gnueabihf`, aktivierte Features und Linker-/Bibliotheksabhängigkeiten festhalten.
 2. Das Artefakt auf einer gesicherten Raspberry Pi OS Lite 32-bit Installation des originalen Zero W ausführen. Spotify Premium voraussetzen. OAuth-/Geräteautorisierung als Dienstnutzer durchführen; Authcache nur in einem nicht versionierten, zugriffsbeschränkten Verzeichnis ablegen.
 3. Zunächst nur einen Spotify-Track-URI in einem unregistrierten Probeprozess testen: Start, bestätigtes Playing, Stop, bestätigtes Stopped/Idle, Neustart und Wiederherstellung des lokalen Authcaches. Noch keine zentrale Runtimequeue existiert. Erst nach separater Queue-Integration wäre ein Test mit abwechselnden lokalen Titeln und Spotify-URIs sinnvoll.
 4. CPU-/RAM-Spitzen, underruns, Start-/Stop-Latenz, Fehlermeldungen, Cache-Reauth und Verhalten bei Netzwerkunterbrechung protokollieren. Dann denselben Test mit mehreren Tracks/Trackwechseln wiederholen. Keine Integration freigeben, bis Stopstatus und Wechsel zwischen lokalen und Spotify-Titeln reproduzierbar bestätigt sind.
@@ -44,3 +44,19 @@ Ein bestandener Cross-Build allein reicht nicht. Offen bleiben reale Laufzeit- u
 ## Quellen und Umfang
 
 Es wurden die oben verlinkten, gepinnten Upstream-Dateien von Mopidy-Spotify, librespot und Raspotify geprüft; keine Installation, Builds, Gerätezugriffe oder Authentifizierung wurden ausgeführt. Die ursprüngliche Raspotify-Abfrage unter `dani-garcia/raspotify` lieferte 404; das Repository-Suchresultat führte zum offiziellen `dtcooper/raspotify`, dessen README dann am vorgegebenen Commit gelesen wurde. Das Cross-Build-Rezept ist nur eine Quellkonfiguration und kein ausgeführter Build oder Raspbian-ABI-Nachweis.
+
+## Quellenaktualisierung 17.10.2026 und nächster gerätefreier Schritt
+
+Bestätigte Zielbasis: originaler Zero W/ARMv6, Raspbian13trixie32Bit (DEBIAN_VERSION_FULL=13.6), HiFiBerry MiniAmp, PiSugar2 mit2LEDs. Direkte librespot-Nutzung bleibt Buildhypothese, kein Laufzeitnachweis. Soloist bleibt gemäß bestehendem S01-Auftrag ausgeschlossen; diese Aktualisierung hat keinen neuen Soloist-Build geprüft. Raspotify nennt inzwischen Trixie, schließt ARMv6 aber weiterhin aus: [offizielles README](https://github.com/dtcooper/raspotify/blob/master/README.md).
+
+Der [offizielle Rust-Targethinweis](https://doc.rust-lang.org/rustc/platform-support/arm-linux.html) ordnet arm ARMv6 zu und nennt ARM1176JZF-S; gnueabihf bezeichnet glibc/Hardfloat. Das belegt die Zielbezeichnung arm-unknown-linux-gnueabihf, keine Kompatibilität aller nativen Bibliotheken. Generische Ubuntu-/Debian-armhf-Sysroots dürfen nicht ohne Nachweis als ARMv6-Raspbian-Sysroot verwendet werden.
+
+Am17.10.2026 erneut geprüfter dev-Snapshot: [librespot19959512c212cbc48a3ff64382fe204f52c659a7](https://github.com/librespot-org/librespot/tree/19959512c212cbc48a3ff64382fe204f52c659a7). Root hat Ref, Commitbaum und drei Dateiblobs remote gelesen und deren Übereinstimmung mit der unabhängigen Recherche bestätigt: Cargo241b26979e1014df3f2e2d30dd2ac3cb31760c66, COMPILING6e25b811c3b1b189acf4cb7cf589047ed65ff1ed, READMEd80006bdb12b41c11d615e7315801807b39d86a3. Der vollständige Commit ist damit gepinnt; die im Cargo deklarierte Version0.8.0 beweist keine Releaseveröffentlichung.
+
+[Cargo.toml](https://github.com/librespot-org/librespot/blob/19959512c212cbc48a3ff64382fe204f52c659a7/Cargo.toml) nennt Workspace-MSRV1.85 und Edition2024. Defaults sind native-tls, rodio-backend und with-libmdns. Rustls-Features heißen rustls-tls-native-roots bzw. rustls-tls-webpki-roots; ein Top-Level-Feature rustls-tls fehlt. Das abschließende ALSA-Beispiel in [COMPILING.md](https://github.com/librespot-org/librespot/blob/19959512c212cbc48a3ff64382fe204f52c659a7/COMPILING.md) verwendet dennoch rustls-tls. Dieses Beispiel nicht ungeprüft übernehmen. Native TLS nutzt OpenSSL; die ARMv6-Eignung des konkret aufgelösten transitiven Kryptografieproviders bleibt unbewiesen.
+
+[librespot README](https://github.com/librespot-org/librespot/blob/19959512c212cbc48a3ff64382fe204f52c659a7/README.md) verlangt Premium und beschreibt lokalen Audio-/Authcache, mit empfohlenen Verzeichnisrechten700. Aktuelle OAuthschalter, Client-ID-/Redirect-Anforderungen und tatsächlicher Kontologin wurden hier nicht erneut anhand CLIcode geprüft. Davon getrennt verlangt der [Spotify-Web-API-Development-Mode](https://developer.spotify.com/documentation/web-api/concepts/quota-modes) Premium beim Appinhaber, höchstens5authentifizierte Nutzer und Allowlist; fehlende Freischaltung kann trotz erfolgreichem Login zu API-403führen. Das beweist keine librespot-Audioauthentifizierung. Connect-Empfang ist kein bestätigter lokaler Einzeltrack-/Stopvertrag für gemischte Playlists.
+
+Nächster begrenzter Auftrag ist ein reproduzierbarer externer CI-Buildversuch für eine Featurekombination: zunächst native-tls mit ALSA/libmdns als Prüfhypothese. Vor Codeauftrag konkrete exklusive Build-/Nachweispfade festlegen. Vollständigen Upstreamcommit, Lockfilehash, Rust-/C-Toolchain, Featurebaum und Raspbian13-ARMv6-Sysroot mit dokumentierter Herkunft pinnen. Alten Ubuntu18.04-Mischsysroot nicht als gültige Basis voraussetzen. Abnahme: tatsächlicher Releasebuild, Artefakthash, aufgelöster Kryptografieprovider, Herkunft sämtlicher nativer Bibliotheken und ELFprüfung von Architektur, Hardfloat-ABI, Interpreter, Shared Libraries und Symbolversionen gegen den Zielsysroot. Workspace-MSRV allein beweist keine vollständige Dependencyauflösung.
+
+Auch danach bleiben MiniAmp-Ausgabe, CPU/RAM/Underruns, tatsächliche Authentifizierung, Neustart, korreliertes Stoppen und natürliches Titelende gerätepflichtig. P02 benötigt anschließend10dokumentierte Quellenwechsel ohne parallele Anbieter; P05 bleibt abhängig. Sechs begrenzt geprüfte Primärquellen plus Roots reine Commitprovenienz, kein Build/Login/Gerätezugriff/OAuthaufruf. Unabhängiger Sol-Researchworker erstellt ausschließlich diese Prosa; Root speichert sie nach dessen Schreibfehler.
