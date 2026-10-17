@@ -194,10 +194,13 @@ function PreviewShell() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const activeLink = document.querySelector('#preview-sidebar .nav-item[aria-current="page"]');
-    const firstLink = document.querySelector('#preview-sidebar .nav-item');
-    (activeLink || firstLink)?.focus();
+    if (!menuOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const activeLink = document.querySelector('#preview-sidebar .nav-item[aria-current="page"]');
+      const firstLink = document.querySelector('#preview-sidebar .nav-item');
+      (activeLink || firstLink)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [menuOpen]);
 
   useEffect(() => {

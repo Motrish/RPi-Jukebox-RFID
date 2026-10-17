@@ -10,7 +10,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 ALLOWED_ROOT_PATHS = {
@@ -141,11 +141,23 @@ def assert_no_overflow(page):
 
 
 def wait_for_focus(page, selector):
-    page.wait_for_function(
-        "selector => { const target = document.querySelector(selector); "
-        "return Boolean(target) && document.activeElement === target; }",
-        arg=selector,
-    )
+    try:
+        page.wait_for_function(
+            "selector => { const target = document.querySelector(selector); "
+            "return Boolean(target) && document.activeElement === target; }",
+            arg=selector,
+            timeout=5000,
+        )
+    except PlaywrightTimeoutError as error:
+        state = page.evaluate(
+            "selector => ({active: document.activeElement?.outerHTML, "
+            "target: document.querySelector(selector)?.outerHTML, "
+            "sidebarClass: document.querySelector('#preview-sidebar')?.className, "
+            "sidebarVisibility: getComputedStyle(document.querySelector('#preview-sidebar')).visibility, "
+            "expanded: document.querySelector('.menu-toggle')?.getAttribute('aria-expanded')})",
+            selector,
+        )
+        raise AssertionError(f"Focus did not reach {selector}; browser state: {state}") from error
 
 
 def wait_for_menu_closed(page):
