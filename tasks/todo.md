@@ -11,7 +11,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F01 | Git- und Testumgebung verfügbar machen | blocked | API-Schreiben/Zurücklesen bestätigt; lokaler Checkout/Worktrees weiterhin gesperrt |
 | F02 | Vollständige V3-Basis im Fork | implemented | feature/foundation = 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Remotehistorie geprüft, lokaler Nachweis offen |
 | F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild/Python und Bookworm-ARMv7-Installer erfolgreich; alte Bullseye-404 dokumentiert, Matrixkorrektur integriert; ARMv6-Gerätenachweis offen |
-| F04 | Zielgerät und Testressourcen festhalten | in_progress | Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs) bestätigt; OS-Release/Audio/Test-SD offen |
+| F04 | Zielgerät und Testressourcen festhalten | in_progress | Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs), Raspbian 13 trixie (13.6) und HiFiBerry MiniAmp bestätigt; aktive Audioanbindung/Test-SD offen |
 | F05 | Designreferenz verfügbar machen | verified | Nutzerbild reference/template.webp am 17.10.2026 sichtbar; u01-design-spec.md |
 | A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
 | A02 | Verträge technisch verankern | in_progress | A02a und A02b1 verified/integrated: PR12 als ea87e4a7, 12 Jest-/22 Pythonvertragstests, vollständiger Web-/Chromiumpass und Pythonmatrix; Transport/Gesamtparität offen |
@@ -56,15 +56,15 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 - Git-CLI-Netzwerkzugriff ist aktuell blockiert; F01 benötigt einen zulässigen ausführbaren Entwicklungsarbeitsplatz.
 - V3-Objekte sind erreichbar; feature/foundation und future3/modern-ui bestehen. develop bleibt unverändert.
 - Connector-Schreibweg einschließlich Workflowdatei bestätigt; CI-Korrektur 83b0c01 nach Review und Bookworm-Runnererfolg als b2be3f3 integriert.
-- Zero W ARMv6, Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs) bestätigt; exaktes OS-Abbild/Release, Audio/Reader, Test-SD und Spotify-Zugang offen.
+- Zero W ARMv6, Pi OS Lite 32 Bit, Raspbian 13 trixie (DEBIAN_VERSION_FULL=13.6), HiFiBerry MiniAmp und PiSugar 2 (2 LEDs) bestätigt; exaktes Abbild, aktive Audioanbindung/Reader und Spotify-Zugang offen. Test-SD wird vom Nutzer vor Gerätetests geklärt.
 - Referenzgrafik seit 17.10.2026 als Nutzerkopie reference/template.webp sichtbar; F05 verified, U01 beschrieben.
 
 ## Ressourcenregister
 
 | Ressource | Besitzer | Ticket | Zustand / Freigabe |
 | --- | --- | --- | --- |
-| Zielbox und Audioausgabe | Nicht vergeben | Keines | Zero W ARMv6 / Pi OS Lite 32 Bit festgelegt; Audio und Gerätezugriff offen |
-| Test-SD und V2-Kopie | Nicht vergeben | Keines | Testaufbau noch nicht festgelegt |
+| Zielbox und Audioausgabe | Nicht vergeben | Keines | Zero W ARMv6 / Raspbian 13 trixie 32 Bit, HiFiBerry MiniAmp festgelegt; aktive Konfiguration und Gerätezugriff offen |
+| Test-SD und V2-Kopie | Nutzer | Q03 | Separate SD wird geklärt, sobald Gerätetests anstehen; unabhängige Entwicklung läuft weiter |
 | Spotify-Sitzung und Konto | Nicht vergeben | Keines | Zugang noch nicht bereitgestellt |
 | Kontrolliertes Testnetz | Nicht vergeben | Keines | Nicht eingerichtet |
 
@@ -264,3 +264,7 @@ PR12 ist nach unabhängigem Folgereview und tatsächlichem vollständigem Erfolg
 U03-Leseinventur hat fünf Quellen am18428caf geprüft: der vorhandene Ordnerhandler eignet sich wegen freier Pfade/Symlinks/Netzexpansion nicht für direkte Exposition. Ein neuer reiner Metadatenzwischenadapter ohne stabile libraryId wird noch nicht zum Coden freigegeben. Der nächste kleine Vertrag muss die tatsächliche Bibliotheksidentität, Rootauflösung und spätere autorisierte Lesegrenze zusammenführen, damit die GUI einen nutzbaren statt weiteren rein synthetischen Zwischenschritt bekommt. Keine neuen RPCmethoden oder Playerinstanzen freigegeben. Lesender Befund in u03-readonly-seam-plan.md; Livecontroller, Spotify und vollständiger Installer bleiben offene Produktarbeit.
 
 Alle Worker beendet; Root veröffentlicht den Dokumentationscheckpoint. Weitere OS-/Audio-/Test-SD-Angaben sind per Textfrage angefordert. Kein Modelllimit, Timer oder automatischer Wiederaufnahmeauftrag wird behauptet.
+
+### Ergänzte Gerätedaten vom Nutzer
+
+Die eingefügte /etc/os-release-Ausgabe bestätigt Raspbian GNU/Linux 13 (trixie), VERSION_ID=13 und DEBIAN_VERSION_FULL=13.6. Audioausgang ist HiFiBerry MiniAmp. Originaler Zero W, 32 Bit und PiSugar 2 mit zwei LEDs bleiben verbindlich. Die separate Test-SD klärt der Nutzer erst vor den Gerätetests; aktuell keine erneute Nachfrage und keine Neuinstallation auf der Bestandskarte. Aktive Audio-/ALSA-/MPD-Konfiguration und tatsächlicher Forkbetrieb unter ARMv6/Trixie bleiben vor der Hardwarefreigabe nachzuweisen. Die bisherige Bookworm-ARMv7-CI ist dafür kein Ersatz. Das Geräteprofil im Fork wird aktualisiert; lokale F04-Datei meldete beim Schreiben Dateizugriff verweigert, keine Rechteänderung vorgenommen. Diese operative Statusliste enthält die aktuellen Angaben. Unabhängige Softwareentwicklung kann fortgesetzt werden.
