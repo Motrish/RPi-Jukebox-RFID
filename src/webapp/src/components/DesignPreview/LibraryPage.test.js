@@ -21,6 +21,8 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
+jest.setTimeout(10000);
+
 beforeEach(() => {
   fetchLibraryPage.mockReset();
 });
@@ -104,6 +106,28 @@ test('a late earlier response cannot replace the latest page', async () => {
   expect(screen.getByText('Neuer Stand.mp3')).toBeInTheDocument();
 });
 
+test('an old request cannot restore data after forgetting and opening a new code', async () => {
+  const oldRequest = deferred();
+  const newRequest = deferred();
+  fetchLibraryPage.mockResolvedValueOnce(page([item('lib_first', 'Vorher geladen.mp3')]))
+    .mockReturnValueOnce(oldRequest.promise)
+    .mockReturnValueOnce(newRequest.promise);
+  render(<LibraryPage />);
+  fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+  fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
+  expect(await screen.findByText('Vorher geladen.mp3')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /aktualisieren/i }));
+  fireEvent.click(screen.getByRole('button', { name: /zugang vergessen/i }));
+  expect(screen.getByLabelText(/zugangscode/i)).toHaveValue('');
+  fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+  fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
+  await act(async () => newRequest.resolve(page([item('lib_new', 'Neu freigegeben.mp3')])));
+  expect(await screen.findByText('Neu freigegeben.mp3')).toBeInTheDocument();
+  await act(async () => oldRequest.resolve(page([item('lib_old', 'Alte Freigabe.mp3')])));
+  expect(screen.queryByText('Alte Freigabe.mp3')).not.toBeInTheDocument();
+  expect(screen.getByText('Neu freigegeben.mp3')).toBeInTheDocument();
+});
+
 test('unmount aborts the pending request and removes the secret-bearing view', async () => {
   let receivedSignal;
   fetchLibraryPage.mockImplementation((_code, _cursor, signal) => {
@@ -178,6 +202,66 @@ test('the real client rejects bad local input and closed-schema violations safel
   }
 });
 
+test('the real client accepts UNKNOWN availability as a valid row', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => page([item('lib_unknown', 'Noch nicht geprüft.mp3', 'UNKNOWN')]),
+  });
+  try {
+    await expect(realFetchLibraryPage(CODE, undefined, new AbortController().signal))
+      .resolves.toEqual(page([item('lib_unknown', 'Noch nicht geprüft.mp3', 'UNKNOWN')]));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test.each([
+  ['a duplicate identifier', page([item('lib_same', 'Eins.mp3'), item('lib_same', 'Zwei.mp3')])],
+  ['an unsafe identifier', page([item('lib/unsafe', 'Titel.mp3')])],
+  ['a cursor that disagrees with the last row', page([item('lib_one', 'Titel.mp3')], 'lib_other')],
+  ['an invalid row shape', { items: [{ libraryId: 'lib_one', displayName: 'Titel.mp3' }], nextCursor: null }],
+  ['an unrecognized list field', { ...page([item('lib_one', 'Titel.mp3')]), privateDebug: 'hidden' }],
+])('the real client rejects %s independently', async (_label, body) => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+  try {
+    await expect(realFetchLibraryPage(CODE, undefined, new AbortController().signal))
+      .rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('the real client rejects an unparsable response body without exposing it', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => { throw new Error('raw secret payload'); },
+  });
+  try {
+    await expect(realFetchLibraryPage(CODE, undefined, new AbortController().signal))
+      .rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('the real client hides fetch rejection details', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn().mockRejectedValue(new TypeError('secret network detail'));
+  try {
+    const error = await realFetchLibraryPage(CODE, undefined, new AbortController().signal)
+      .catch((failure) => failure);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain('secret network detail');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('the real client turns unauthorized and service responses into fixed errors', async () => {
   const originalFetch = global.fetch;
   global.fetch = jest.fn()
@@ -191,5 +275,48 @@ test('the real client turns unauthorized and service responses into fixed errors
     expect(global.fetch).toHaveBeenCalledTimes(2);
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test('the component aborts at the ten second deadline and leaves a safe error', async () => {
+  jest.useFakeTimers();
+  let signal;
+  fetchLibraryPage.mockImplementation((_code, _cursor, requestSignal) => {
+    signal = requestSignal;
+    return new Promise((_resolve, reject) => {
+      requestSignal.addEventListener('abort', () => {
+        reject(Object.assign(new Error('aborted request'), { name: 'AbortError' }));
+      }, { once: true });
+    });
+  });
+  try {
+    render(<LibraryPage />);
+    fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+    fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await act(async () => { jest.advanceTimersByTime(10000); });
+    expect(screen.getByRole('alert').textContent.trim().length).toBeGreaterThan(0);
+    expect(screen.queryByText('aborted request')).not.toBeInTheDocument();
+    expect(signal.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+});
+
+test('a completed component request clears its deadline timer', async () => {
+  jest.useFakeTimers();
+  fetchLibraryPage.mockResolvedValue(page([item('lib_done', 'Erledigt.mp3')]));
+  try {
+    render(<LibraryPage />);
+    fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+    fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
+    await act(async () => {});
+    expect(screen.getByText('Erledigt.mp3')).toBeInTheDocument();
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.clearAllTimers();
+    jest.useRealTimers();
   }
 });

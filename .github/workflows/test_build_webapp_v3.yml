@@ -38,6 +38,7 @@ jobs:
         uses: ./.github/actions/build-webapp
 
       - name: Test React library client and page
+        timeout-minutes: 2
         working-directory: src/webapp
         run: CI=true npm test -- --watchAll=false --runInBand --runTestsByPath src/components/DesignPreview/LibraryPage.test.js
 
