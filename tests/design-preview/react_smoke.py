@@ -440,6 +440,7 @@ def run(args):
                 "blocked_requests": [],
                 "websockets": [],
                 "legacy_mocked_websockets": [],
+                "legacy_discarded_frames": 0,
                 "console_errors": [],
                 "page_errors": [],
             }
@@ -453,14 +454,25 @@ def run(args):
 
             def mock_legacy_socket(socket):
                 legacy_report["legacy_mocked_websockets"].append(socket.url)
-                socket.close(code=1000, reason="Mock legacy test transport")
+
+                def discard_legacy_frame(_message):
+                    legacy_report["legacy_discarded_frames"] += 1
+
+                socket.on_message(discard_legacy_frame)
+                if len(legacy_report["legacy_mocked_websockets"]) == 1:
+                    progress("legacy socket held open; client frames are discarded locally")
 
             legacy_page.route_web_socket("**/*", mock_legacy_socket)
             progress("legacy mocked-transport boot started")
             legacy_page.goto(f"{base_url}#/", wait_until="networkidle")
+            progress("legacy page navigation returned")
             legacy_page.locator("#routes").wait_for()
+            require(bool(legacy_report["legacy_mocked_websockets"]),
+                    "Legacy boot did not reach its mocked transport")
+            progress(f"legacy route loaded with {len(legacy_report['legacy_mocked_websockets'])} held-open mock socket(s)")
             progress("legacy router rendered")
             legacy_page.locator(".MuiBottomNavigation-root").wait_for()
+            progress("legacy bottom navigation rendered")
             require(legacy_page.locator(".design-preview").count() == 0,
                     "Legacy boot rendered the preview")
             require(legacy_page.get_by_role("link", name=re.compile("Start")).count() > 0,
