@@ -19,6 +19,7 @@ import {
   INITIAL_TRACK_ID,
   RECENT_TRACK_IDS,
 } from './previewModel';
+import LibraryPage from './LibraryPage';
 import './styles.css';
 
 const ROUTES = [
@@ -27,6 +28,7 @@ const ROUTES = [
   { path: '/spotify', label: 'Spotify', icon: '●', spotify: true },
   { path: '/playlists', label: 'Playlists', icon: '▤' },
   { path: '/rfid', label: 'RFID', icon: '▧' },
+  { path: '/library', label: 'Bibliothek', icon: '▤' },
   { path: '/energy', label: 'Akku & PiSugar', icon: '◒' },
   { path: '/settings', label: 'Einstellungen', icon: '⚙' },
 ];
@@ -186,6 +188,7 @@ function PreviewShell() {
     [query],
   );
   const currentView = location.pathname.split('/').filter(Boolean).pop() || 'start';
+  const libraryRoute = location.pathname === '/library';
   const batteryAvailable = batteryMode !== 'off';
 
   useEffect(() => {
@@ -264,11 +267,11 @@ function PreviewShell() {
           </Link>
           <p className="nav-label">Bibliothek</p>
           <nav className="primary-nav" aria-label="Bereiche">
-            {ROUTES.slice(0, 5).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
+            {ROUTES.slice(0, 6).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
           </nav>
           <p className="nav-label nav-label-spaced">Gerät</p>
           <nav className="primary-nav" aria-label="Gerät">
-            {ROUTES.slice(5).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
+            {ROUTES.slice(6).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
           </nav>
           <div className="sidebar-note"><span className="status-dot" aria-hidden="true" /><span>Lokale Vorschau</span></div>
         </aside>
@@ -286,11 +289,11 @@ function PreviewShell() {
               onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             >☰</button>
             <div className="breadcrumbs"><span className="breadcrumb-kicker">DEINE MUSIK</span><span className="breadcrumb-current">{ROUTES.find((route) => route.path === `/${currentView}`)?.label || 'Start'}</span></div>
-            <label className="search-box" htmlFor="preview-search">
+            {!libraryRoute && <label className="search-box" htmlFor="preview-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.4" /><path d="m16 16 4.1 4.1" /></svg>
               <input id="preview-search" ref={searchRef} type="search" aria-label="Titel, Album oder Quelle suchen" placeholder="Titel, Album oder Quelle suchen" value={query} onChange={(event) => setQuery(event.target.value)} />
               <kbd>/</kbd>
-            </label>
+            </label>}
             {batteryAvailable && (
               <Link className="battery-pill" to="/energy" aria-label={batteryMode === 'active' ? `PiSugar-Akku: ${DEMO_BATTERY_PERCENT} Prozent` : 'PiSugar-Akku unbekannt'}>
                 <span className="battery-glyph" aria-hidden="true"><span /></span>
@@ -300,7 +303,7 @@ function PreviewShell() {
             <div className="profile-avatar" aria-label="Profil: Zuhause">Z<span className="avatar-presence" aria-hidden="true" /></div>
           </header>
 
-          <div className="preview-ribbon" role="note"><span className="ribbon-dot" aria-hidden="true" />Designvorschau · Beispieldaten</div>
+          <div className={`preview-ribbon${libraryRoute ? ' library-ribbon' : ''}`} role="note"><span className="ribbon-dot" aria-hidden="true" />{libraryRoute ? 'Player und Gerätestatus sind Vorschau · Bibliothek nutzt Katalogdaten' : 'Designvorschau · Beispieldaten'}</div>
 
           <Routes>
             <Route path="/" element={<Navigate to="/start" replace />} />
@@ -320,6 +323,7 @@ function PreviewShell() {
             <Route path="/music" element={(
               <MusicPage title="Musik" eyebrow="EURE SAMMLUNG" tracks={visibleTracks} query={query} onSelect={selectTrack} onReset={resetSearch} />
             )} />
+            <Route path="/library" element={<LibraryPage />} />
             <Route path="/spotify" element={(
               <MusicPage title="Spotify" eyebrow="VERBUNDENE QUELLE · BEISPIELDATEN" tracks={filterTracks(query, 'Spotify')} query={query} onSelect={selectTrack} onReset={resetSearch} description="Spotify-Titel sind hier Beispieldaten. Eine Kontoverbindung wird nicht hergestellt." />
             )} />
