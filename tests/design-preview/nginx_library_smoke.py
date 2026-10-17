@@ -208,6 +208,7 @@ class NginxProcess:
 def raw_request(port, method, target, headers=(), http_version="1.1", timeout=4):
     lines = ["{} {} HTTP/{}".format(method, target, http_version)]
     lines.extend("{}: {}".format(name, value) for name, value in headers)
+    lines.append("Connection: close")
     request = ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1")
     with socket.create_connection(("127.0.0.1", port), timeout=timeout) as connection:
         connection.settimeout(timeout)
