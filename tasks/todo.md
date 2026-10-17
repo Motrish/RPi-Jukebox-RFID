@@ -37,7 +37,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | B01 | Socketstatus und Fähigkeiten | in_progress | B01a bei fb2a7d0 reviewed, CI 38966180905 erfolgreich, PR 8 als 5057f0b integriert; 20 Tests, Modellprofile/Hardware/Runtime offen |
 | B02 | Begrenzte Energieaktionen | planned | Noch keine Produktumsetzung |
 | B03 | Hersteller-GUI unter Geräteadresse | planned | Noch keine Produktumsetzung |
-| I01 | Minimaler Setupzugang | in_progress | I01a lesender Slice verified/integrated: PR13 als87ee99b4, finales Folgereview und beide Pythonmatrices grün; LAN/Setup/Gerät offen |
+| I01 | Minimaler Setupzugang | in_progress | I01a und I01b-dev verified/integrated: PR13 als87ee99b4, PR20 als741085f9; lokaler Bundle-/Setup-/Reactstart mit echter nginx-/Chromium- und voller Pythonabnahme. Persistente Jobs, LAN/HTTPS und Gerät offen |
 | I02 | Persistente Aufträge und privilegierter Worker | planned | Noch keine Produktumsetzung |
 | I03 | Audio-/RFID-Wizard als erster kompletter Pfad | planned | Noch keine Produktumsetzung |
 | I04 | Optionale Plugins im Wizard | planned | Noch keine Produktumsetzung |
@@ -71,7 +71,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 ## Verbindliche Arbeitsregeln
 
 - Kein Astra. Sol ausschließlich für Koordination, Planung und Review; Luna erstellt alle ausführbaren Projektartefakte einschließlich Tests, Workflows und Konfiguration.
-- Koordinator plus ein bis zwei Worker nur bei unabhängigem Nutzen. Ein Codeowner je Datei; Coding und Abschlussreview desselben Slices seriell. Aktuell: R01b-Autor und unabhängige Reviewer abgeschlossen; kein Codingworker aktiv. Root dokumentiert die geprüfte Integration. Nächster eigenständiger Auftrag ist I01b-dev.
+- Koordinator plus ein bis zwei Worker nur bei unabhängigem Nutzen. Ein Codeowner je Datei; Coding und Abschlussreview desselben Slices seriell. Aktuell sind I01b-Autor und Reviews abgeschlossen. Root dokumentiert PR20; nächster fachlicher Auftrag sind I02s persistente Setupjobs.
 - Teilstages sind keine vollständigen Checkouts. GitHub Actions prüft jeweils einen vollständigen Checkout; Root veröffentlicht nur die exklusiven Pfade als mechanische Übernahme auf vollständigem Basisbaum und liest exakte Inhalte/SHAs zurück.
 - Git-CLI-Netzwerk, lokaler Vollcheckout/Worktrees, gh-Authentifizierung und WSL waren nicht verfügbar. Der authentifizierte GitHub-Connector funktioniert. Keine erneuten Umgehungsversuche ohne geänderte Voraussetzung.
 - Writable Workspace: G:/Entwicklung. C:/Users/nehme/phoniebox-work ist ein fremder V2-Arbeitsstand und bleibt unberührt.
@@ -80,7 +80,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 ## Aktueller Remote- und Integrationsstand
 
-- Produktbranch future3/modern-ui: 2002cc2c2de3daa8f0b2b06e6f9513cd71c92886, geprüfter Baum 3dd4b2240cca9ebf729050a919cd3207074fd5b2. R01a/PR18 und R01b/PR19 integriert; tatsächliche Source-CI und identische Mergebäume bestätigt.
+- Produktbranch future3/modern-ui: 741085f902c88aaa2fa74ef5dcd473ba993427e3, geprüfter Baum 167270d05665b96c9f9c44f3ef26e9d96891d20e. I01b-dev/PR20 integriert; tatsächliche Source-CI, identischer Mergebaum und Eltern bestätigt.
 - develop bleibt unverändert auf 42d5023e37dbf8de6477fef5ebcd6eae3cb5087d. V3-Basis v3.6.0 ist 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Herkunft und frühere Integrationen sind in den Einzelberichten belegt.
 - U03a2: [PR16](https://github.com/Motrish/RPi-Jukebox-RFID/pull/16), Merge b5190698a7b39abc8e5dc1062cee8334261474fc. Echte Bibliotheksroute #/design-preview/library in bestehender Shell; Paging, Verfügbarkeit, Zugangscode nur im Componentspeicher, Abort/Generation/Timeout und sichere Fehlerzustände.
 - X01: [PR17](https://github.com/Motrish/RPi-Jukebox-RFID/pull/17), Merge 6b872011c2e79263f61ca5384908b23251178a6b. Drei exklusive Pfade: nginx.library-loopback.conf, nginx_library_smoke.py und bestehender Webworkflow. Optionaler echter IPv4-Loopback-nginx mit festem Buildroot/APIziel; globale Defaultsite und Installer unverändert.
@@ -111,7 +111,7 @@ Originruling: Standard-nginx unterscheidet im leeren Variablenwert fehlendes und
 
 ## Nächste getrennte Aufträge und offene Grenzen
 
-1. I01b-dev: lokalen Entwicklerstart mit verifiziertem Bundle, I01a-Preflight und eigenem Loopback-nginx umsetzen. R01b-Abhängigkeit erfüllt, Handoff i01b-bootstrap-plan.md. Web-CI muss für diesen Checkout ein neues passendes Bundle erzeugen; kein Node/npm-/CRA-Build auf dem512-MB-Zero-W.
+1. I02: persistente serialisierte Setupjobs mit commandId, festen Schritten, Privilegiengrenze und Crash-Recovery vorbereiten. I01b-dev ist mit PR20 abgeschlossen; Gesamtinstaller bleibt offen. Kein Node/npm-/CRA-Build auf dem 512-MB-Zero-W.
 2. I05/X: tatsächlichen LAN-/HTTPS-/Einmalzugangsweg getrennt konkretisieren; vorhandene Entwicklerloopbacks sind keine LAN-/Installationsfreigabe. Bedienplattformen/vertrauenswürdiger CA- oder Proxyweg bleiben offen.
 3. I02/I03: persistente feste Installationsjobs und privilegierte Schritte getrennt umsetzen. Audio/Testton, RFID/Testscan und Musikpfad/Selbsttest bleiben eigene Fenster. Keine freien Shellbefehle aus Browserdaten.
 4. S01/P02: ARMv6-Spotify-Build, Auth, MiniAmp-Ausgabe und bestätigten Quellenwechsel auf gesicherter Test-SD nachweisen. [Spotifyoptionen](armv6-spotify-options.md) sind Quellenprüfung, kein erfolgreicher Build/Gerätetest. Soloist/Raspotify nicht als ARMv6-kompatibel voraussetzen.
@@ -144,3 +144,37 @@ S01-Quellenstand17.10als Prosa aktualisiert: sechs Primärquellen, nochmals tats
 Nächster konkreter Auftrag: I01b-dev mit5geplanten Pfaden gemäß Handoff. LANtrust, privilegierte persistente Jobs, Audio-/RFID-/Spotify-/PiSugar-Liveanbindung und echte Geräteschritte bleiben getrennt. Test-SD erst vor Gerätearbeit klären; kein neuer Benutzerbeitrag für den gerätefreien Entwicklerstarter erforderlich. Kein aktiver Hintergrundworker nach diesem Abschluss behauptet.
 
 Gezielte Unterlagen: [R01a-Plan](r01a-web-bundle-plan.md), [R01a-Bericht](r01a-web-bundle-report.md), [R01a-Testreview](r01a-web-bundle-review.md), [R01a-Sourcereview](r01a-web-bundle-source-review.md), [R01b-Plan](r01b-bundle-intake-plan.md), [R01b-Bericht](r01b-bundle-intake-report.md), [R01b-Testreview](r01b-bundle-intake-review.md), [R01b-Sourcereview](r01b-bundle-intake-source-review.md), [I01b-Handoff](i01b-bootstrap-plan.md), [Spotifyquellen](armv6-spotify-options.md). Diese Datei bleibt die einzige operative Statusliste.
+
+## I01b-dev: geprüfte Integration am 18.10.2026
+
+[PR20](https://github.com/Motrish/RPi-Jukebox-RFID/pull/20) ist als741085f902c88aaa2fa74ef5dcd473ba993427e3 integriert. Source5150de984e523cd23d26230e064dfb9d45eb3d2d und Merge besitzen exakt Baum167270d05665b96c9f9c44f3ef26e9d96891d20e; Eltern2002cc2c und5150de98, Produktref und unverändertes develop42d5023e wurden nach Merge gelesen. Genau fünf Pfade; Shellmodus100755, alle fünf Remoteinhalte bytegleich.
+
+Vorstufe: tatsächlicher Missingmodule-RED39076557354/Job117524799774 vor den drei Produktdateien. Zwei enge Testfixrunden schlossen acht ursprüngliche und zwei Folgebefunde. Source39077664956 scheiterte real an der Portkollision; ganzes Source-/Schnittstellenreview schloss anschließend Pfad-/Diagnosefehler und führte den tragenden Ownershiprest weiter. Web39078195163 zeigte die separate nginx-Fehlerhtml-/SPA-Verwechslung im Harness. Finale Antwortmarker-, Lesebudget- und Bodyklassifikationsregressionen sind grün; unabhängiges enges Abschlussreview gibt beide Achsen frei.
+
+Tatsächliche Source-Abnahme: Web39078642625/Job117530908018 vollständig completed/success:61 Linuxsetupfälle,15R01a-Fälle,22Python-/12Webverträge,24Bibliotheks-Jestfälle, alte Browser-/nginxpfade und neuer echter Bundle-/nginx-/Chromium-/Signal-/Cleanup-/Kollisionspfad samt Artefaktrundlauf. Beide Pythonmatrizen39078642618 und39078645963 jeweils3.9–3.13 plus finish117531583697/117531492489 completed/success. Gelesener3.9Job117530908192:262Tests bestanden, eine bestehende runpy-Warnung aus unverändertem library_api-CLI-Test. Lokal61Fälle insgesamt/5Windows-Skips; V3lint0.
+
+Source-Artefakt12118400475 gehört ausschließlich zu5150de98, inneres Archiv1370736Bytes/SHA256dc82205b56e1269b9b5ee17be5d1e6f5384a368c495f9f69a5394f185fe5e652. Gleiche Buildbytes erlauben kein Umschreiben der Manifestidentität. Der tatsächliche Merge-Weblauf39078909520/Job117531676291 ist vollständig grün. Neues Artefakt12117814330 und Manifest gehören exakt zum Merge741085f902c88aaa2fa74ef5dcd473ba993427e3; eigener echter Bootstrap-/Browserpfad, Upload/Download derselben ID und erneute Identitätsprüfung bestanden. Archiv1370736Bytes mit obiger SHA256, ZIP1371589Bytes; Ablauf24.10.2026um23:26:43UTC. Merge-Python39078909498 und unveränderter ARMv7-Installer39078909556 sind ohne gelesenen Endzustand keine weiteren Passnachweise; ARMv7 ist kein Zero-W-Gerätetest.
+
+| Vorprüfung | Produzent/Verbraucher | Ergebnis |
+| --- | --- | --- |
+| Tests/Source | Feste CLI und Laufzeitgrenze | Test-first vor Produktdateien |
+| Launcher/R01b | Verifiziertes privates Webroot | Kontext bleibt bis eigener Bereinigung aktiv |
+| Launcher/I01a | Gehaltener port0-Socket, eigener Thread | Unveränderte Fakten, keine Aktivierungsbehauptung |
+| Launcher/nginx | Feste Pfade und Loopbackziele | Antwortmarker, Zeit-/Größengrenzen, keine freien Direktiven |
+| CI/Bundle | Tatsächlicher Checkout und vollständiger Build | Frisches passendes Manifest vor Upload geprüft |
+
+Ruling: Vorhandenen isolierten Teilstage plus Connector und Vollcheckout-CI fortführen, statt gesperrte Worktrees erneut zu versuchen — bekannte Arbeitsplatzgrenze — echte Integration erst durch CI nachweisbar.
+
+Ruling: Eine operative Liste und dauerhafte Berichte/Stages behalten — Wiederaufnahme braucht Nachweise — kleiner zusätzlicher Speicherbedarf statt destruktiver Skillbereinigung.
+
+Ruling: I01a im eigenen Thread mit gehaltenem port0-Socket und nginx als einzigem Vordergrundkind betreiben — kontrollierbare minimale Laufzeit — spätere Dienste-/LANintegration benötigt eigenen Entwurf.
+
+Ruling: Portverfügbarkeitsprüfung mit unabhängigem zufälligem Antwortmarker kombinieren — Bindprobe allein lässt ein Freigabe-/Neubindungsfenster — zusätzlicher fester Template-/Headerparameter mit Regressionen, keine neue Zugangsroute.
+
+Ruling: Den tragenden Ownership-/Leserest trotz erreichtem finalem Reviewfixzyklus eng weiter korrigieren und den fehlerhaften Head nicht integrieren — bekannte Startgrenze trägt die Freigabe — ein zusätzlicher gezielter Luna-Fix-/Prüfzyklus.
+
+Zusätzlicher gelesener Altendzustand: R01b-Merge-ARMv7-Installer39058968556 ist vollständig grün (Build, fünf Routinen, Cleanup); kein ARMv6-/Gerätenachweis. Vorige Dokumentations-Markdownläufe39059263260 und39059260438 sind grün. I01a-/R01a-/R01b-Kopien und ursprünglicher Webworkflow wurden vor Start gegen2002cc2c bytegleich gelesen.
+
+Nächster Auftrag: I02 mit persistenten Setupjobs und später I03 Audio/RFID; LAN/HTTPS/Einmalzugang, öffentliche Lieferung und Spotify-/PiSugar-/Player-Liveanschluss bleiben getrennt. Test-SD vor Gerätearbeit klären. Kein Gerät, Dienst, Paket, Konto oder LAN geändert. Kein aktiver Hintergrundworker/Timer nach diesem Abschluss behauptet.
+
+Belege: [Integrationsbericht](i01b-bootstrap-integration-report.md), [Auftragsbrief](i01b-bootstrap-brief.md), [Testreview](i01b-bootstrap-test-review.md), [Testabschluss](i01b-bootstrap-test-rereview2.md), [Sourcereview](i01b-bootstrap-source-review.md), [engster Abschluss](i01b-bootstrap-ownership-review.md), [letzter Autorenbericht](i01b-bootstrap-ownership-closure-report.md). Diese Datei bleibt die einzige operative Statusliste.
