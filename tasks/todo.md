@@ -48,7 +48,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | Q01 | Unabhängige Regressionen | in_progress | Zwei zusätzliche Storeproben reviewed, CI 38963718947 erfolgreich, PR 7 als caa8ca9 integriert; Gesamt-Q01 offen |
 | Q02 | Browser und Referenzabnahme | in_progress | U02a/b: echte Chromiumtests, React-Screenshots und Desktop-Sichtprüfung bestätigt; vollständige Live-/Geräteabnahme offen |
 | Q03 | Exklusive Hardwareabnahme | planned | Noch keine Produktumsetzung |
-| R01 | Updatepfad und passende Artefakte | planned | Noch keine Produktumsetzung |
+| R01 | Updatepfad und passende Artefakte | in_progress | R01a verified/integrated als PR18/fc995afb:15Linux-/211Gesamttests, unabhängige Reviews, vollePythonmatrix und commitgenauer echter CI-Artefaktrundlauf auch am Merge bestanden. R01b private Extraktion test-first in Arbeit; voller Update-/Rollbackpfad offen |
 | R02 | Gesamt-Review und Releasevorbereitung | planned | Noch keine Produktumsetzung |
 
 ## Bekannte Startvoraussetzungen
@@ -71,7 +71,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 ## Verbindliche Arbeitsregeln
 
 - Kein Astra. Sol ausschließlich für Koordination, Planung und Review; Luna erstellt alle ausführbaren Projektartefakte einschließlich Tests, Workflows und Konfiguration.
-- Koordinator plus ein bis zwei Worker nur bei unabhängigem Nutzen. Ein Codeowner je Datei; Coding und Abschlussreview desselben Slices seriell. Aktuell sind alle Coding-/Reviewworker beendet.
+- Koordinator plus ein bis zwei Worker nur bei unabhängigem Nutzen. Ein Codeowner je Datei; Coding und Abschlussreview desselben Slices seriell. Aktuell: Luna schreibt ausschließlich neue R01b-Tests; R01a-Autor/Reviewer abgeschlossen. Root verwaltet CI/Integration; unabhängiges R01b-Review folgt erst nach Freeze.
 - Teilstages sind keine vollständigen Checkouts. GitHub Actions prüft jeweils einen vollständigen Checkout; Root veröffentlicht nur die exklusiven Pfade als mechanische Übernahme auf vollständigem Basisbaum und liest exakte Inhalte/SHAs zurück.
 - Git-CLI-Netzwerk, lokaler Vollcheckout/Worktrees, gh-Authentifizierung und WSL waren nicht verfügbar. Der authentifizierte GitHub-Connector funktioniert. Keine erneuten Umgehungsversuche ohne geänderte Voraussetzung.
 - Writable Workspace: G:/Entwicklung. C:/Users/nehme/phoniebox-work ist ein fremder V2-Arbeitsstand und bleibt unberührt.
@@ -80,12 +80,12 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 
 ## Aktueller Remote- und Integrationsstand
 
-- Produktbranch future3/modern-ui: 6b872011c2e79263f61ca5384908b23251178a6b, geprüfter Baum fbf9127e7299bac52ada5fda9ce042cee7c6a9a9.
+- Produktbranch future3/modern-ui: fc995afb397164364541e53fd6c7dd4bed79c0e9, geprüfter Baum 3da2f3b54aaa9fb137dcc9bf51b41f8c0e05d485. R01a-PR18 integriert und tatsächlich geprüft, einschließlich Bundle für genau diesen Mergecommit.
 - develop bleibt unverändert auf 42d5023e37dbf8de6477fef5ebcd6eae3cb5087d. V3-Basis v3.6.0 ist 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Herkunft und frühere Integrationen sind in den Einzelberichten belegt.
 - U03a2: [PR16](https://github.com/Motrish/RPi-Jukebox-RFID/pull/16), Merge b5190698a7b39abc8e5dc1062cee8334261474fc. Echte Bibliotheksroute #/design-preview/library in bestehender Shell; Paging, Verfügbarkeit, Zugangscode nur im Componentspeicher, Abort/Generation/Timeout und sichere Fehlerzustände.
 - X01: [PR17](https://github.com/Motrish/RPi-Jukebox-RFID/pull/17), Merge 6b872011c2e79263f61ca5384908b23251178a6b. Drei exklusive Pfade: nginx.library-loopback.conf, nginx_library_smoke.py und bestehender Webworkflow. Optionaler echter IPv4-Loopback-nginx mit festem Buildroot/APIziel; globale Defaultsite und Installer unverändert.
 - Der tatsächlich geprüfte X01-Head ist 8aa64245c2bd7569d124853d8b95aad16296fdab. Beide Mergeobjekte, Eltern, Produktrefs, unverändertes develop und identische geprüfte Bäume wurden remote bestätigt. Für X01 stimmen zusätzlich alle drei lokalen Git-Blobs bytegenau mit dem Remote-Baum überein.
-- Dokumentationsbranch: docs/development-plan. Letzter vor diesem Abschluss bestätigter Head war 998d4d3e17bc215f3b669d6b0ce828b150536026; den aktuellen Head beim Wiederaufnehmen remote lesen. Keine eigene Commit-ID in den Inhalt dieses Commits vorausberechnen.
+- Dokumentationsbranch: docs/development-plan. Letzter vor diesem Abschluss bestätigter Head war 7444eaf34f278529715bbb1875caa36c85b5a0d2; den aktuellen Head beim Wiederaufnehmen remote lesen. Keine eigene Commit-ID in den Inhalt dieses Commits vorausberechnen.
 
 ## Letzte vollständige Nachweise
 
@@ -111,8 +111,8 @@ Originruling: Standard-nginx unterscheidet im leeren Variablenwert fehlendes und
 
 ## Nächste getrennte Aufträge und offene Grenzen
 
-1. R01: zum Backendcommit passendes, vorkompiliertes Web-Bundle mit Manifest/Hash und sicherem Lieferweg konkretisieren. Kein Node/npm-/CRA-Build als Pflicht auf dem512-MB-Zero-W.
-2. I01b: auf dieser Basis sicheren Browserbootstrap mit OS-/Bestandsprüfung, begrenztem Zugang und vertrauenswürdigem HTTPS-Weg planen. I01a ist nur lesender Loopback-Preflight; X01 ist nur der optionale lokale nginx-Anschluss.
+1. R01b: nach R01as Integrationsnachweis lokale vertrauensgebundene Bundleannahme und sichere private Extraktion umsetzen; keine Aktivierung/Installation. R01a liefert CI-Artefakte, kein anonymer Lieferweg. Kein Node/npm-/CRA-Build auf dem512-MB-Zero-W.
+2. I01b-dev: nach R01b lokalen Entwicklerstart mit vorausgeladenem Bundle, I01a-Preflight und eigenem nginx umsetzen. LAN/HTTPS/Einmalzugang bleiben getrennt; konkreter Handoff i01b-bootstrap-plan.md. I01a ist lesender Loopback-Preflight, X01 optionaler lokaler nginx-Anschluss.
 3. I02/I03: persistente feste Installationsjobs und privilegierte Schritte getrennt umsetzen. Audio/Testton, RFID/Testscan und Musikpfad/Selbsttest bleiben eigene Fenster. Keine freien Shellbefehle aus Browserdaten.
 4. S01/P02: ARMv6-Spotify-Build, Auth, MiniAmp-Ausgabe und bestätigten Quellenwechsel auf gesicherter Test-SD nachweisen. [Spotifyoptionen](armv6-spotify-options.md) sind Quellenprüfung, kein erfolgreicher Build/Gerätetest. Soloist/Raspotify nicht als ARMv6-kompatibel voraussetzen.
 5. PiSugar-, lokale MPD-/GPIO-/RFID-/Timer- und Mischqueue-Liveanbindung bleiben offen. Der sichtbare Player und Akkustatus sind weiterhin als Vorschau gekennzeichnet; echte Bibliotheksdaten machen sie nicht automatisch live.
@@ -126,3 +126,15 @@ Bestätigt: originaler Zero W ARMv6, Raspbian GNU/Linux13 trixie32Bit (DEBIAN_VE
 - Folgende Abhängigkeiten: [Bootstrapgrenze](i01-bootstrap-seam-plan.md), [Quelleninventur](f03-source-inventory.md), [Verträge](a01-contracts.md), [Ressourcenregeln](resource-policy.md).
 
 Die ausführlichen Einzelberichte und GitHub-Commits enthalten Befunde und Korrekturrunden. Lokale mechanische Diffpakete sind Reviewartefakte; die vollständigen veröffentlichten Änderungen stehen in PR16/17. Die ältere operative Chronologie bis U03a1 bleibt außerdem in der Dokumentationshistorie bei998d4d3e erhalten. Diese gekürzte Datei ist weiterhin die einzige operative Statusliste.
+
+## Fortsetzung: R01a abgeschlossen, R01b test-first
+
+R01a als [PR18](https://github.com/Motrish/RPi-Jukebox-RFID/pull/18) am17.10.2026 integriert: Mergefc995afb397164364541e53fd6c7dd4bed79c0e9, geprüfter Baum3da2f3b54aaa9fb137dcc9bf51b41f8c0e05d485. Voller R01-Update-/Rollbackauftrag bleibt offen. Drei exklusive Pfade, Luna als einziger Codeautor, unabhängige serielle Test-/Sourcereviews geschlossen. Tatsächlicher initialer Missingmodule-RED39043364778 vor Source; später tatsächlich reproduzierter Artefaktpfadfehler39044139548 durch exakt eine Workflowzeile korrigiert.
+
+Finaler Sourcehead642023df: Web39044317830/Job117429904263 mit15/15Linux-Bundletests, bestehenden24Jest/22Python-/12JS-Verträgen und allen3Chromium/nginxprüfungen sowie echter CRA-Paketierung, Upload, konkretem Artifact-IDdownload und erneuter Identitäts-/Digestprüfung bestanden. Python-PRmatrix39044321784 alle3.9–3.13 plusfinish grün,211Gesamttests im3.9Log. Am Workflow-only-Korrekturcommit wurde kein zweiter Push-Pythonlauf ausgelöst; keine erfundene Doppelmatrix.
+
+Integrationscommitfc995afb: tatsächlicher Weblauf39044627838/Job117430793469 und Python39044627823 alle3.9–3.13 plusfinish ebenfalls completed/success. Passendes Bundle12104499265, Name phoniebox-webapp-fc995afb397164364541e53fd6c7dd4bed79c0e9, Archiv1370736Bytes/SHA256dc82205b56e1269b9b5ee17be5d1e6f5384a368c495f9f69a5394f185fe5e652; Manifest bindet exakt Motrish/Fork und vollen Mergecommit. Authentifiziertes CI-Artefakt läuft24.10.2026ab, kein öffentlicher Release-/Bootstrapendpunkt. Mergeobjekt, Eltern, identischer Sourcebaum, Produktref und unverändertes develop wurden remote bestätigt. Keine Geräte-/System-/Kontoänderung.
+
+R01b beginnt auf fc995afb als enges Folgeslice mit2neuen Pfaden: installation/websetup/bundle.py und test/websetup/test_bundle.py. Ausschließlich private lokale Übernahme/validierte Extraktion mit Contextmanager, kein Installieren/Aktivieren/Download. Phase1 zunächst nur Tests, Source absichtlich abwesend bis tatsächlicher Linux-RED und akzeptiertem unabhängigem Review. Teilstage phoniebox-staging/r01b-bundle-intake, neuer Luna-Codeowner. Vorbereitung/Autorisierung aus bestehender Entwicklungsfreigabe, Nutzerfortsetzung und i01b-bootstrap-plan.md; keine neue Auth-/Netzwerk-/Uploadintegration.
+
+Gezielte Unterlagen: [R01a-Plan](r01a-web-bundle-plan.md), [Ausführungsbericht](r01a-web-bundle-report.md), [Testreview](r01a-web-bundle-review.md), [Sourcereview](r01a-web-bundle-source-review.md), [I01b-Handoff](i01b-bootstrap-plan.md), [R01b-Plan](r01b-bundle-intake-plan.md). Diese Datei bleibt die einzige operative Statusliste.
