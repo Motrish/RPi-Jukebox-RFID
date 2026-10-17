@@ -187,8 +187,8 @@ class LibraryCatalog:
             connection = self._connect(create=True)
             connection.execute("BEGIN IMMEDIATE")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            tables = self._table_names(connection)
-            if version == 0 and not tables:
+            objects = self._schema_objects(connection)
+            if version == 0 and not objects:
                 self._create_schema(connection, root_fd)
             else:
                 self._verify_schema(connection)
@@ -204,11 +204,15 @@ class LibraryCatalog:
             self._close_connection(connection)
 
     @staticmethod
-    def _table_names(connection: sqlite3.Connection) -> set:
+    def _schema_objects(connection: sqlite3.Connection) -> set:
         rows = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
+            "SELECT type, name FROM sqlite_master"
         ).fetchall()
-        return {row[0] for row in rows}
+        return {
+            (row[0], row[1])
+            for row in rows
+            if not row[1].startswith("sqlite_")
+        }
 
     def _create_schema(
         self, connection: sqlite3.Connection, root_fd: int
@@ -245,7 +249,12 @@ class LibraryCatalog:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version != _SCHEMA_VERSION:
             raise CatalogError("STORE_UNAVAILABLE")
-        if self._table_names(connection) != {"catalog_meta", "media"}:
+        expected_objects = {
+            ("table", "catalog_meta"),
+            ("table", "media"),
+            ("index", "media_active_path"),
+        }
+        if self._schema_objects(connection) != expected_objects:
             raise CatalogError("STORE_UNAVAILABLE")
         expected_columns = {
             "catalog_meta": (
@@ -453,46 +462,57 @@ class LibraryCatalog:
     def register_file(self, relative_path: str) -> dict:
         self._ensure_open()
         relative_path = self._validate_relative_path(relative_path)
+        unavailable = False
         with self._operation() as (root_fd, connection):
             try:
                 fingerprint = self._probe_path(root_fd, relative_path)
             except OSError:
                 raise CatalogError("FILESYSTEM_UNAVAILABLE")
-            if fingerprint is None:
-                raise CatalogError("MEDIA_UNAVAILABLE")
             active = connection.execute(
                 "SELECT * FROM media WHERE relative_path = ? "
                 "AND tombstoned = 0",
                 (relative_path,),
             ).fetchone()
-            if active is not None:
+            if fingerprint is None:
+                if active is not None:
+                    connection.execute(
+                        "UPDATE media SET tombstoned = 1 "
+                        "WHERE library_id = ?",
+                        (active["library_id"],),
+                    )
+                unavailable = True
+            elif active is not None:
                 if fingerprint == self._stored_fingerprint(active):
                     return self._public_record(active, "AVAILABLE")
                 connection.execute(
                     "UPDATE media SET tombstoned = 1 WHERE library_id = ?",
                     (active["library_id"],),
                 )
-            library_id = "lib_" + uuid.uuid4().hex
-            values = self._store_fingerprint(fingerprint)
-            try:
-                connection.execute(
-                    "INSERT INTO media "
-                    "(library_id, relative_path, display_name, device, inode, "
-                    "size, mtime_ns, ctime_ns, tombstoned) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
-                    (
-                        library_id,
-                        relative_path,
-                        relative_path.rsplit("/", 1)[-1],
-                        *values,
-                    ),
-                )
-            except sqlite3.IntegrityError:
-                raise CatalogError("STORE_UNAVAILABLE")
-            row = connection.execute(
-                "SELECT * FROM media WHERE library_id = ?", (library_id,)
-            ).fetchone()
-            return self._public_record(row, "AVAILABLE")
+            if not unavailable:
+                library_id = "lib_" + uuid.uuid4().hex
+                values = self._store_fingerprint(fingerprint)
+                try:
+                    connection.execute(
+                        "INSERT INTO media "
+                        "(library_id, relative_path, display_name, device, "
+                        "inode, size, mtime_ns, ctime_ns, tombstoned) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                        (
+                            library_id,
+                            relative_path,
+                            relative_path.rsplit("/", 1)[-1],
+                            *values,
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    raise CatalogError("STORE_UNAVAILABLE")
+                row = connection.execute(
+                    "SELECT * FROM media WHERE library_id = ?", (library_id,)
+                ).fetchone()
+                result = self._public_record(row, "AVAILABLE")
+        if unavailable:
+            raise CatalogError("MEDIA_UNAVAILABLE")
+        return result
 
     def get_media(self, library_id: str):
         self._ensure_open()
