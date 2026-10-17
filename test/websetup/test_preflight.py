@@ -4,10 +4,14 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+import sys
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from installation.websetup import preflight, server
+STAGE_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(STAGE_ROOT))
+
+from installation.websetup import preflight, server  # noqa: E402
 
 
 class PreflightTests(unittest.TestCase):
