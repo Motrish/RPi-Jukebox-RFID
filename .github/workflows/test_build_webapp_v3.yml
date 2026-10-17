@@ -42,6 +42,11 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Test Python V1 contracts
+        run: python -m unittest discover -s test/contracts -p test_v1.py -v
+        env:
+          PYTHONPATH: src/jukebox
+
       - name: Test web app V1 contract seam
         working-directory: src/webapp
         run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/v1.test.js

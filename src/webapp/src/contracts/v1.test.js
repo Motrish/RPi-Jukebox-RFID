@@ -100,19 +100,20 @@ function attempt(validator, input) {
 }
 
 function compareWithPython(cases) {
-  const javascriptResults = cases.map((item) => attempt(item.validator, item.input));
-  const pythonCases = cases.map((item, index) => ({
+  const originalPythonCases = cases.map((item) => ({
     validator: item.validator,
-    serialized: JSON.stringify(javascriptResults[index].ok
-      ? javascriptResults[index].value
-      : item.input),
+    serialized: JSON.stringify(item.input),
   }));
-  const pythonResults = pythonValidate(pythonCases);
-  expect(pythonResults).toHaveLength(cases.length);
+  const originalPythonResults = pythonValidate(originalPythonCases);
+  const javascriptResults = cases.map((item) => attempt(item.validator, item.input));
+  cases.forEach((item, index) => {
+    expect(JSON.stringify(item.input)).toBe(originalPythonCases[index].serialized);
+  });
+  const canonicalCases = [];
 
   cases.forEach((item, index) => {
     const javascript = javascriptResults[index];
-    const python = pythonResults[index];
+    const python = originalPythonResults[index];
     if (item.expectedError) {
       expect(javascript.ok).toBe(false);
       expect(javascript.error.code).toBe(item.expectedError);
@@ -123,9 +124,21 @@ function compareWithPython(cases) {
     expect(javascript.ok).toBe(python.ok);
     if (javascript.ok) {
       expect(JSON.parse(JSON.stringify(javascript.value))).toEqual(python.value);
+      canonicalCases.push({
+        validator: item.validator,
+        serialized: JSON.stringify(javascript.value),
+        expectedValue: javascript.value,
+      });
     } else {
       expect(javascript.error).toEqual(python.error);
     }
+  });
+
+  const canonicalResults = pythonValidate(canonicalCases);
+  expect(canonicalResults).toHaveLength(canonicalCases.length);
+  canonicalResults.forEach((result, index) => {
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual(canonicalCases[index].expectedValue);
   });
 }
 
@@ -307,6 +320,10 @@ describe('transport-free V1 JavaScript contract writer', () => {
     const unpairedSource = { ...clone(FIXTURES.valid_queue), sourcePlaylistId: null };
     const wrongSelection = { ...clone(FIXTURES.valid_queue), currentEntryId: 'qe_missing' };
     const unsupportedVersion = { ...clone(FIXTURES.valid_playlist), contractVersion: 2 };
+    const appliedNullResult = { ...appliedResult(validCommands()[0]), result: null };
+    const rejectedNullError = { ...rejectedResult(validCommands()[0]), error: null };
+    const appliedNullError = { ...appliedResult(validCommands()[0]), error: null };
+    const rejectedNullResult = { ...rejectedResult(validCommands()[0]), result: null };
     const resultWithBothArms = {
       ...appliedResult(validCommands()[0]),
       error: errorFor('VALIDATION_ERROR'),
@@ -337,11 +354,20 @@ describe('transport-free V1 JavaScript contract writer', () => {
       { validator: 'validate_queue_snapshot', input: unpairedSource, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_queue_snapshot', input: wrongSelection, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_playlist_snapshot', input: unsupportedVersion, expectedError: 'UNSUPPORTED_VERSION' },
+      ...[0, -1].map((contractVersion) => ({
+        validator: 'validate_playlist_snapshot',
+        input: { ...clone(FIXTURES.valid_playlist), contractVersion },
+        expectedError: 'UNSUPPORTED_VERSION',
+      })),
       { validator: 'validate_command', input: unknownAction, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_error', input: prototypeError, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_error', input: wrongRetryability, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_error', input: wrongLimitDetails, expectedError: 'VALIDATION_ERROR' },
       { validator: 'validate_command_result', input: resultWithBothArms, expectedError: 'VALIDATION_ERROR' },
+      { validator: 'validate_command_result', input: appliedNullResult, expectedError: 'VALIDATION_ERROR' },
+      { validator: 'validate_command_result', input: rejectedNullError, expectedError: 'VALIDATION_ERROR' },
+      { validator: 'validate_command_result', input: appliedNullError, expectedError: 'VALIDATION_ERROR' },
+      { validator: 'validate_command_result', input: rejectedNullResult, expectedError: 'VALIDATION_ERROR' },
       ...invalidStatuses.map((status) => ({
         validator: 'validate_command_result',
         input: { ...appliedResult(validCommands()[0]), status },
