@@ -278,7 +278,8 @@ def install_network_guards(context, servers, blocked, sockets):
         if local and (api or asset):
             route.continue_()
         else:
-            blocked.append(f"{request.method} {parsed.netloc}{parsed.path}")
+            if len(blocked) < 20:
+                blocked.append(f"{request.method} {parsed.scheme}://{parsed.netloc}{parsed.path[:160]}")
             route.abort()
 
     def reject_socket(route):
@@ -319,6 +320,25 @@ def verify_catalog_page(page, expected):
                 f"catalog title missing for {record['libraryId']}")
 
 
+def wait_for_closed_mobile_sidebar(page):
+    sidebar = page.locator("#preview-sidebar")
+    toggle = page.locator(".menu-toggle")
+    expect(toggle).to_have_attribute("aria-expanded", "false")
+    require("sidebar-open" not in (sidebar.get_attribute("class") or "").split(),
+            "mobile menu is open before the long-title screenshot")
+    expect(sidebar).to_have_css("visibility", "hidden")
+    settled = page.evaluate("""() => new Promise(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const sidebar = document.getElementById('preview-sidebar');
+            const style = window.getComputedStyle(sidebar);
+            const rect = sidebar.getBoundingClientRect();
+            resolve(style.visibility === 'hidden' && rect.right < 0);
+        }));
+    })""")
+    require(settled,
+            "closed mobile sidebar still overlaps the library")
+
+
 def run_real_catalog_check(context, servers, output, emit_png, report, expected_items, path_ids):
     page = context.new_page()
     try:
@@ -357,6 +377,8 @@ def run_real_catalog_check(context, servers, output, emit_png, report, expected_
                 "long title was truncated in the real catalog response")
         for width in (1024, 768, 390, 320):
             page.set_viewport_size({"width": width, "height": 960})
+            if width <= 700:
+                wait_for_closed_mobile_sidebar(page)
             metrics = long_row.evaluate("""row => {
                 const copy = row && row.querySelector('.library-row-copy');
                 const title = row && row.querySelector('.library-title-text');
@@ -502,7 +524,7 @@ def run_controlled_browser_cases(context, servers, report):
 def run_browser(servers, output, emit_png, expected_items, path_ids):
     report = {
         "status": "running", "checks": [], "controlled_checks": [],
-        "screenshots": [], "api_paths": [],
+        "screenshots": [], "api_paths": [], "blocked_requests": [],
     }
     blocked = []
     sockets = []
@@ -521,7 +543,8 @@ def run_browser(servers, output, emit_png, expected_items, path_ids):
                 context, servers, output, emit_png, report, expected_items, path_ids
             )
             run_controlled_browser_cases(context, servers, report)
-            require(not blocked, "browser attempted a forbidden HTTP request")
+            report["blocked_requests"] = blocked
+            require(not blocked, "browser attempted a forbidden HTTP request: " + "; ".join(blocked[:10]))
             require(not sockets, "browser attempted a WebSocket")
             require(not page_errors, "browser raised an unexpected JavaScript exception")
             require(not protocol_errors, "browser emitted an unexpected protocol or console error")
@@ -529,6 +552,7 @@ def run_browser(servers, output, emit_png, expected_items, path_ids):
             report["status"] = "passed"
         except Exception:
             report["status"] = "failed"
+            report["blocked_requests"] = blocked
             (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
             raise
         finally:
