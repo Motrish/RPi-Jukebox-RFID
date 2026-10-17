@@ -227,7 +227,7 @@ CONTROLLED_FETCH = r"""
     nextCursor: null
   });
   const originalFetch = window.fetch.bind(window);
-  window.fetch = (input, init) => {
+  window.fetch = async (input, init) => {
     const requestUrl = input instanceof Request ? input.url : String(input);
     const url = new URL(requestUrl, location.href);
     if (url.pathname !== "/api/library/media") return originalFetch(input, init);
