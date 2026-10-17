@@ -1,6 +1,6 @@
 # Phoniebox – Aufgabenstatus
 
-Entwicklung am 16.10.2026 durch den Nutzer gestartet. V3-Basis, Remote-Schreibweg und Web-/Python-Baseline sind bestätigt. Nach dem zurückgesetzten Nutzungslimit werden transportfreie Module mit vollständigem CI-Checkout entwickelt. Aktuell sind Core-Verträge, Playlist-/Queue-Store und PiSugar-Reader integriert; Runtime, GUI und Zielgerätetests bleiben offen.
+Entwicklung am 16.10.2026 durch den Nutzer gestartet. V3-Basis, Remote-Schreibweg und Web-/Python-Baseline sind bestätigt. Nach dem zurückgesetzten Nutzungslimit werden transportfreie Module mit vollständigem CI-Checkout entwickelt. Integriert sind Core-Verträge, Playlist-/Queue-Store, lokaler transportfreier Adapter, PiSugar-Reader und die gerätefreie React-Designvorschau. Liveanschluss, Installer und Zielgerätetests bleiben offen.
 
 Verbindlich: [Hauptplan](../docs/superpowers/plans/2026-10-16-phoniebox-multi-agent-plan.md), [Backlog](../docs/superpowers/plans/multi-agent/backlog.md). Diese Datei ist die einzige operative Statusliste.
 
@@ -28,7 +28,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | S03 | Katalog, Linkvalidierung und seitenweiser Import | planned | Noch keine Produktumsetzung |
 | S04 | Ablauf und erneute Anmeldung | planned | Noch keine Produktumsetzung |
 | U01 | Visuelles Konzept anhand der Vorlage | verified | Tatsächliches Nutzerbild und Entwurf von Root sowie unabhängigem Reviewer anhand echter Screenshots verglichen; u01-design-spec.md |
-| U02 | Shell, Theme und Navigation | in_progress | U02a verified/integrated als afe41e5 (PR10): Review, Browser, Webbuild und Pythonmatrix grün; U02b1/b2 für Reactvorschau läuft bei Luna |
+| U02 | Shell, Theme und Navigation | in_progress | U02a/b als gerätefreie Vorschau verified/integrated: e61a63e (PR11), vollständiger Web-/Chromiumpass und beide Pythonmatrices; Liveanschluss offen |
 | U03 | Lokale Bibliothek anzeigen | planned | Noch keine Produktumsetzung |
 | U04 | Upload und Indexierung | planned | Noch keine Produktumsetzung |
 | U05 | Liveplayer, Warteschlange und Playlists | planned | Noch keine Produktumsetzung |
@@ -46,7 +46,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | M01 | Lesende V2-Inventur und Vorschau | planned | Noch keine Produktumsetzung |
 | M02 | Import mit Sicherung und Rückweg | planned | Noch keine Produktumsetzung |
 | Q01 | Unabhängige Regressionen | in_progress | Zwei zusätzliche Storeproben reviewed, CI 38963718947 erfolgreich, PR 7 als caa8ca9 integriert; Gesamt-Q01 offen |
-| Q02 | Browser und Referenzabnahme | in_progress | U02a mit echten Chromiumprüfungen und Referenzvergleich bestätigt; React-/Liveansichten offen |
+| Q02 | Browser und Referenzabnahme | in_progress | U02a/b: echte Chromiumtests, React-Screenshots und Desktop-Sichtprüfung bestätigt; vollständige Live-/Geräteabnahme offen |
 | Q03 | Exklusive Hardwareabnahme | planned | Noch keine Produktumsetzung |
 | R01 | Updatepfad und passende Artefakte | planned | Noch keine Produktumsetzung |
 | R02 | Gesamt-Review und Releasevorbereitung | planned | Noch keine Produktumsetzung |
@@ -167,7 +167,7 @@ Folgecommit 82d9547f5c4431e77ef9312f1ca5fbc1e5fe54d6 unabhängig reviewed. Push-
 
 P01a1 ist ausschließlich für den transportfreien Adaptervertrag verified; Gesamt-P01 bleibt in_progress wegen realer Session, LibraryResolver, vorhandener MPD-Integration und Zielgeräteprüfung. 25 lokale Adaptertests ergänzen 60 Core-/Store- und 20 PiSugarprüfungen. Die volle CI enthält einen echten kompletten Checkout, kein ARMv6-Audiogerät. Es laufen keine Worker.
 
-Nächster Schritt: reale Session-/Bibliotheksbindung und ARMv6-Spotify-Probe spezifizieren, erst nach den jeweiligen Voraussetzungen anschließen. Anfrage zu OS-Release und Audioanschluss ist offen; Test-SD und vollständiger Entwicklungscheckout fehlen weiter. Designgrafik bleibt nicht abrufbar. Kein Timer und keine automatische Wiederaufnahme eingerichtet.
+Historischer nächster Schritt vor Eingang der Designgrafik: reale Session-/Bibliotheksbindung und ARMv6-Spotify-Probe spezifizieren, erst nach den jeweiligen Voraussetzungen anschließen. Anfrage zu OS-Release und Audioanschluss ist offen; Test-SD und vollständiger Entwicklungscheckout fehlen weiter. Die Designgrafik war bei diesem alten Checkpoint noch nicht abrufbar. Kein Timer und keine automatische Wiederaufnahme eingerichtet.
 
 ### Nutzerreferenz am 17.10.2026
 
@@ -190,3 +190,39 @@ PR10 bei geprüftem 7820c608b7fb23df4a768c826d363b08abb4c96f nach unabhängigem 
 Root hat U02b1 (vier Reactquelldateien) und U02b2 (zwei QA-/CI-Dateien) seriell auf dieser Basis freigegeben. Ein Luna-Worker, eigener Stage u02-react. Previewboot muss vor Import der verbindenden Legacy-Socketmodule erfolgen. Vollständige CI-Browserprüfung mit blockierten Backend-/WebSocketpfaden und echten Screenshots ist vorgeschrieben. Kein zweiter Reactroot, iframe oder Geräteschreiber. Aufgaben-/Schreibgrenzen in u02b-react-seam-plan.md.
 
 Lesender Nachcheck der vorhandenen anderen lokalen Arbeitskopie löst F01 nicht: V3-Releaseobjekt fehlt und eigene ungesicherte Änderungen sind vorhanden; nichts geändert. Lokale V3-Worktrees, Ziel-OS-Release/Audio/Test-SD und echte Geräteabnahme bleiben offen.
+
+### U02b1 Quellcheckpoint
+
+Vier eingefrorene Luna-Reactdateien wurden unverändert als 7a2ac0bde8eb5dbcd3e0be9c268b953cd06931ca veröffentlicht, Tree 2d0a273e5ae49abe80cdcd790f74e446a6964da9, Parent afe41e50. Noch kein Featurebranch und kein vollständiger Buildnachweis: U02b2 ergänzt jetzt die Browser-/CI-Prüfung vor dem gemeinsamen PR. Root hat beim Lesen einen möglichen unbenutzten Import und fehlende Heading-IDs zur Autorprüfung gemeldet; kein eigener Codefix.
+
+### U02b gemeinsamer Prüfstand
+
+PR11 enthält 38385382fb8a21077df1946762768196dd4a1930, Tree 3ea6383c993b953f964354d93a3f194f4e1f9c2e, zwei mechanische Commits auf vollständiger Basis afe41e50. Alle sechs Luna-Dateien identisch zurückgelesen. Vor Veröffentlichung korrigierte der Autor auch durch Root gefundene Harnessfehler (Suchname, geschlossenes Mobilmenü, Reportfelder, Sprache, eindeutige Akkuselektoren, Queuenavigation); ein lokaler React-PASS wurde nicht behauptet. Vollständiger Web-/Chromiumlauf39017135403 und Pythonläufe39017135406/39017144643 gestartet. Ein unabhängiger Sol-Reviewer liest den genauen Head; kein paralleler Coder, kein Merge vor Nachweisen.
+
+U02b-Erstprüfung38385382: unabhängiges Review findet zwei P2 (mobiler Tastatureinstieg/Fokusrückgabe und nach früher Auswertung nicht erneut geprüfte späte Browser-/Netzfehler). CRA-Build in39017135403 erfolgreich, Chromium scheitert in test_mobile_menu an der Schließsichtbarkeit. Pythonläufe39017135406/39017144643 erfolgreich. Ein Luna-Worker korrigiert ausschließlich index.js und react_smoke.py mit Regressionen; kein Merge und kein Browser-PASS.
+
+U02b-Folgehead4fe22d62 im unabhängigen Quellreview ohne weiteren Codeblocker. Beide Pythonmatrices39017568069/39017571175 enthalten alle fünf erfolgreichen Versionen plus finish. Weblauf39017568156 baut erfolgreich, Chromium scheitert nach bestandener Enter-/Escape-Sequenz beim Fokus nach erneutem Space-Öffnen (Harness315). Kein Browserpass und kein Merge. Ein Luna-Worker untersucht diese reale Timing-/Fokusgrenze im gleichen Zwei-Dateien-Scope; Folgereview folgt erst nach Freeze.
+
+U02b-Folgestand82179282b2c5fd201e8061914102f79a2ae0685f (Tree2d96f61924fae89359a3eaf3a7c3698d282a647e) plant den Menüfokus per abbrechbarem Browserframe und ergänzt begrenzte Fehlerdiagnostik. Unabhängiges enges Folgereview ohne neuen Quellblocker; Root-Readback und V3lint erfolgreich. Timingursache bleibt Hypothese bis neuem Browsernachweis. Neue Läufe39017927905 (Web/Chromium),39017927929 und39017932061 (Python) am Checkpoint offen.
+
+### U02b begrenzte Diagnose
+
+Luna reproduzierte den still scheiternden Fokus während des CSS-Sichtbarkeitsübergangs in einer lokalen Chromium-Minimalprobe. c30b0bfdefa76eb41ce0966d8e4aefcee44f0160 wartet auf sichtbare/eingeschobene Sidebar; unabhängiges Ein-Datei-Review ohne neuen Quellblocker. Sein echter Browserlauf39018216900 hängt jedoch nach erfolgreichem Build im Chromiumschritt. Logs sind währenddessen nicht verfügbar; der vorhandene Connector hat keine Abbruchfunktion. Nutzer erhielt den direkten Lauf-Link und den Hinweis auf Cancel workflow. Der Lauf wurde nicht als abgebrochen behauptet.
+
+8964d087ebeba2bfd42cddf2dc90a54af97726e4, Tree77ad60e80124b2d774b14e34d13b66e3ae6cdc07, ergänzt ausschließlich Harness/Workflow mit geflushten Phasenmeldungen, 15s-Aktions-/Navigationsgrenzen, 5s-Late-Fetch-Grenze, drei Minuten Browserstep und zehn Minuten Buildjob. Unabhängiges QA-Folgereview ohne neuen Blocker; Allowlist und strikte Assertions bleiben erhalten. Der neue Weblauf39018713268 und Pythonläufe39018713274/39018716109 sind noch offen. Kein Merge und kein React-Browserpass.
+
+U02b am Head8964d087: vollständiger CRA-Build und beide Pythonmatrices erfolgreich. Im begrenzten Browserlauf39018713268 bestehen alle Previewphasen (sieben Routen, Brand/Player/Queue, Suche/Akku, mobile Enter/Space/RFID-Wiederöffnung, drei Screenshots, 320px, später Guardprobe, finale Netz-/Browserassertions und Preview-Kontextabschluss). Root hat den echten 1440px-React-Screenshot aus Job117356023502 tatsächlich gesehen. Die Gesamtprüfung endet nach drei Minuten Timeout unmittelbar nach legacy mocked-transport boot started. Previewpass ist kein Gesamtpass; PR bleibt Draft. Ein Luna-Worker untersucht ausschließlich den Legacy-Harness-Mock, kein weiterer UI-Fokusfix. Der ältere unbegrenzte Lauf39018216900 ist weiterhin nicht als beendet belegt.
+
+### U02b integriert und tatsächlich geprüft
+
+Head 6ccab3333dbd665f347bcc6a8621a911076d04a4 wurde nach unabhängigem Folgereview und vollständigem Pass als e61a63e4b1322f47c252aad281176ec618e77831 in future3/modern-ui integriert (PR11). Tree 4e72f86b0319b37a9e4c292a05ad6a57c9161480 exakt erhalten; develop blieb 42d5023e37dbf8de6477fef5ebcd6eae3cb5087d. Alle sechs finalen Luna-Dateien identisch zurückgelesen.
+
+Web-/Chromiumlauf 39019221148 vollständig erfolgreich, einschließlich sämtlicher Previewphasen, des Legacy-Routers mit vier offenen lokalen WebSocket-Mocks und des Browserabschlusses. Pythonläufe 39019221187/39019223912 enthalten jeweils fünf erfolgreiche Versionen 3.9–3.13 plus finish. Root hat den echten React-Desktop-Screenshot angesehen; der finale Screenshot ist byteidentisch. Die vorherigen fehlgeschlagenen bzw. hängenden Läufe bleiben als historische Nachweise dokumentiert, kein früher Browserpass wurde erfunden.
+
+U02b ist ausschließlich als gerätefreie Designvorschau verified. Liveplayer, echte Spotify-/PiSugar-Anbindung, Installer und Geräteabnahme bleiben offen. Der alte unbeschränkte Lauf 39018216900 ist noch nicht als beendet belegt und wurde dem Nutzer mit Abbruchlink gemeldet; spätere Browserjobs sind begrenzt. Root plus ein Worker, keine automatische Timer-/Quota-Zusage.
+
+Nächste serielle Arbeit: A02b-JavaScript-Vertragsgrenze anhand tatsächlicher Pythonquelle präzisieren. Vor Vollparität müssen die nicht unterscheidbaren JSON-Zahlenschreibweisen und sichere JS-Ganzzahlen ausdrücklich behandelt werden; keine stille Änderung des vorhandenen Pythonvertrags und kein selbstgebauter JSON-Parser. A02b1 wurde anschließend im unten beschriebenen Bereich freigegeben.
+
+### A02b1 gestartet
+
+Root hat die vier Dateigrenzen und gerichtete kanonische JS-Ausgabeverträglichkeit in a02b-js-seam-plan.md freigegeben. Ein Luna-Worker schreibt zuerst nur Jesttests, Corpus und Workflow; v1.js bleibt bis zum tatsächlichen CI-RED abwesend. Erst danach wird implementiert. Bestehende Pythonvalidatoren, 22 Tests, Fixturekeys, Gerätetransporte und GUIzustand bleiben erhalten. Keine Vollparitätsbehauptung für verlorene Floatlexeme/außerhalb JS darstellbare Werte. Code/Review weiter seriell, keine weiteren Worker.

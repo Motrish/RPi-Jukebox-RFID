@@ -1,6 +1,6 @@
 # U02b – kleiner React-Anschluss
 
-Stand: 17.10.2026. **Planvorschlag, keine Coderfreigabe.** Empfehlung U02b1: akzeptierte Shell als ausdrücklich simulierte View im vorhandenen Reactclient, vor Auswertung des Geräteimportgraphen ausgewählt. Liveanschluss folgt separat.
+Stand: 17.10.2026. **Root hat U02b1 und U02b2 unten seriell freigegeben.** Die folgende Quellanalyse begründet U02b1: akzeptierte Shell als ausdrücklich simulierte View im vorhandenen Reactclient, vor Auswertung des Geräteimportgraphen ausgewählt. Liveanschluss folgt separat.
 
 ## Tatsächliche Quellgrenze
 
