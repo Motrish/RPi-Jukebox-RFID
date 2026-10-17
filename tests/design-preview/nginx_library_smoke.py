@@ -309,6 +309,7 @@ def verify_http_surface(nginx, backend, counters, switches, ids):
             and counters["detail"] == before["detail"],
             "over-limit header count reached authorization or the catalog")
 
+    before = dict(counters)
     for target, label in (
         ("/api/library/media%2Fanything?limit=20", "encoded slash"),
         ("/api/library/media?limit=20&bad=%", "invalid percent escape"),
@@ -522,6 +523,10 @@ def verify_browser(nginx, output, expected, ids, backend, api_thread, counters):
         page.get_by_text("Die Bibliothek konnte nicht geladen werden. Bitte erneut versuchen.").wait_for()
         require(page.get_by_text(CODE, exact=True).count() == 0,
                 "backend failure displayed the access code")
+        require(not page_errors, "browser page errors after upstream failure: {}".format(page_errors))
+        require(not blocked and not sockets,
+                "browser attempted blocked HTTP/WebSocket traffic after upstream failure: {} {}"
+                .format(blocked, sockets))
         page.close()
         context.close()
         browser.close()
