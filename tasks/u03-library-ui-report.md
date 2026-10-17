@@ -57,7 +57,7 @@ Final checks: `python -m py_compile` passed; repository-configured flake8 passed
 
 ## Root-Nachtrag Testfix Runde2
 
-Autor änderte ausschließlich den kontrollierten window.fetch-Wrapper zu async, damit sämtliche Fälle Promise<Response> liefern. Root bestätigt per Volltextvergleich ausschließlich diese eine Zeile. Finaler Harness-SHA25647d9cb49d0d5cf2bfaf55463be39f9b41bdd85eb2c801fb4446adec605ec9f69. Autor meldet pycompile und V3lint erfolgreich, keine tatsächliche Browserausführung. Sein Berichtsappend meldete Dateizugriff verweigert; Root ergänzt hier autorisiert die Prosa, keine ACL- oder Sandboxänderung. Generierter Cache bleibt ohne Veröffentlichungsabsicht liegen; keine Bereinigung erforderlich. Test-/Workflowhashes bleiben e69e3592/e6f6bd24; Produktmodule fehlen weiterhin.
+Autor änderte ausschließlich den kontrollierten window.fetch-Wrapper zu async, damit sämtliche Fälle `Promise<Response>` liefern. Root bestätigt per Volltextvergleich ausschließlich diese eine Zeile. Finaler Harness-SHA25647d9cb49d0d5cf2bfaf55463be39f9b41bdd85eb2c801fb4446adec605ec9f69. Autor meldet pycompile und V3lint erfolgreich, keine tatsächliche Browserausführung. Sein Berichtsappend meldete Dateizugriff verweigert; Root ergänzt hier autorisiert die Prosa, keine ACL- oder Sandboxänderung. Generierter Cache bleibt ohne Veröffentlichungsabsicht liegen; keine Bereinigung erforderlich. Test-/Workflowhashes bleiben e69e3592/e6f6bd24; Produktmodule fehlen weiterhin.
 
 Root hat den aktuellen tatsächlichen Web-RED39036483971/117407292781 gelesen: Build erfolgreich, Jest scheitert am fehlenden ./libraryClient. Dieser RED gilt für identische Jestinputs; die spätere einzeilige Harnesskorrektur wurde dabei ausdrücklich noch nicht ausgeführt. Die finale gemeinsame Source-CI muss den kompletten geänderten Harness durchführen.
 
@@ -70,6 +70,7 @@ Implemented the four authorized product paths only. `libraryClient.js` exposes `
 Local validation: Node 24 module syntax check passed for `libraryClient.js`; source scan found no localStorage/sessionStorage/document.cookie use. React build, Jest, and Chromium were not run because `src/webapp/node_modules` is absent; no dependencies were installed. The frozen Jest and workflow SHA-256 values remain byte-identical to the reviewed RED input: E69E3592CABAD37963646639A07E4AEF6AC197FF14E20A8A424E461DB6A4ABF8 and E6F6BD2498FE66AD3ECE6E15076A5AC9194CFE7B83069DE1E78A9739D781B078. Harness hash remains the accepted Phase 1 value 47D9CB49D0D5CF2BFAF55463BE39F9B41BDD85EB2C801FB4446ADEC605EC9F69; it was not changed or executed in this phase.
 
 Product path SHA-256:
+
 - LibraryPage.js: 5A12375821A89577B3F9091C02A98D9E5F387867648FE1D7B442C2D17EF11A7E
 - libraryClient.js: 92021A51377215EE830E49F89E0D3ACD9EFBCC4D7F93B6CA1CAC496613CD1649
 - index.js: 22852BB0580F540F3E9BF31105A4D2A89E3FE9B3AE49B9542CF17ABC54300CC7
@@ -78,10 +79,12 @@ Product path SHA-256:
 ### Phase 2 final hash correction
 
 The final static review made small follow-up edits to the two new modules after the preceding report block was written. The authoritative final product hashes are:
+
 - LibraryPage.js: `105A76C76164648BA63BAF6A0DA3350D16215BEBC86C6683F5C03360BB6F58E6`
 - libraryClient.js: `8C56C15D6999D6FF9C72F64D80F4ECC928DBD2963EE51C51014D0A3414DCB1E0`
 - index.js: `22852BB0580F540F3E9BF31105A4D2A89E3FE9B3AE49B9542CF17ABC54300CC7`
 - styles.css: `45F709ADECC4641170E5DFD125C94A3A4010870FBD515EF8E97EE98C9984C978`
+
 The Phase 1 test, harness, and workflow hashes remain as recorded above. No product file changes after these hashes were calculated.
 
 ## Phase A test-only response and focus regressions

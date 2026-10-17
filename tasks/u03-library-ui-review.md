@@ -80,7 +80,7 @@ Die kontrollierte UUIDvergabe ersetzt keinen Katalog und keine API: Nur der UUID
 
 ### Neuer P2 – kontrollierter Fetchhelper verletzt den Promisevertrag
 
-In library_smoke.py, CONTROLLED_FETCH, ersetzt eine gewöhnliche, nicht asynchrone Funktion window.fetch. Die meisten kontrollierten Zweige geben eine Response direkt zurück, darunter empty, unauthorized, unavailable, malformed und der erste Erfolg von first-then-unauthorized. Die Fetchschnittstelle gibt dagegen Promise<Response> zurück. Ein korrekter Produktclient darf fetch(...).then(...) benutzen; mit diesen Fixtures erhält er stattdessen eine Response ohne then und scheitert. Ein Client mit await fetch(...) würde zufällig funktionieren, weil await auch unmittelbare Werte akzeptiert. Der Test darf diese zulässige Implementierungswahl nicht vorgeben.
+In library_smoke.py, CONTROLLED_FETCH, ersetzt eine gewöhnliche, nicht asynchrone Funktion window.fetch. Die meisten kontrollierten Zweige geben eine Response direkt zurück, darunter empty, unauthorized, unavailable, malformed und der erste Erfolg von first-then-unauthorized. Die Fetchschnittstelle gibt dagegen `Promise<Response>` zurück. Ein korrekter Produktclient darf fetch(...).then(...) benutzen; mit diesen Fixtures erhält er stattdessen eine Response ohne then und scheitert. Ein Client mit await fetch(...) würde zufällig funktionieren, weil await auch unmittelbare Werte akzeptiert. Der Test darf diese zulässige Implementierungswahl nicht vorgeben.
 
 Minimale Korrektur ausschließlich im Harness: Jeder kontrollierte Zweig muss denselben Promisevertrag wie echtes Fetch liefern, beispielsweise durch einen asynchronen Wrapper. Verzögerte Antworten sollen weiterhin nach Abort auflösbar bleiben, damit der Generationstest seine Aussage behält. Keine zusätzliche Testmatrix oder Produktänderung ist dafür nötig.
 
@@ -92,7 +92,7 @@ Root-Ruling zur engen Nachkorrektur: Bleiben Jestdatei und Workflow gegenüber 1
 
 Geprüft wurde nur das im zweiten Reviewpaket dokumentierte Einzeilendiff: window.fetch erhält einen asynchronen Wrapper. Root bestätigt ansonsten identischen Harnessinhalt und SHA-256 47d9cb49d0d5cf2bfaf55463be39f9b41bdd85eb2c801fb4446adec605ec9f69; Jest und Workflow sind unverändert, beide Produktmodule weiterhin abwesend.
 
-Der allein verbliebene Fetch-Promise-P2 ist ADDRESSED. Der asynchrone Wrapper liefert für unmittelbare Responsewerte nun Promise<Response>; vorhandene Promisezweige und der echte Fetchrückgabewert werden übernommen. Damit funktionieren sowohl await als auch eine zulässige then-Kette. Die absichtlich verzögerte, trotz Abort noch auflösbare Antwort behält ihre Aussage für den Generationstest. Im engen Fixdiff ist keine neue Vertragsverletzung erkennbar.
+Der allein verbliebene Fetch-Promise-P2 ist ADDRESSED. Der asynchrone Wrapper liefert für unmittelbare Responsewerte nun `Promise<Response>`; vorhandene Promisezweige und der echte Fetchrückgabewert werden übernommen. Damit funktionieren sowohl await als auch eine zulässige then-Kette. Die absichtlich verzögerte, trotz Abort noch auflösbare Antwort behält ihre Aussage für den Generationstest. Im engen Fixdiff ist keine neue Vertragsverletzung erkennbar.
 
 Spezifikationsurteil für Phase 1: die geprüften Test-/Harnesskorrekturen sind erfüllt. Qualitätsurteil für dieses eingefrorene Testpaket: keine offenen konkreten P1/P2 aus dem seriellen Review. Dies ist keine vorgezogene GREEN-Abnahme der noch fehlenden Produktmodule.
 
