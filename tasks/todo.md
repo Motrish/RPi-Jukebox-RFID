@@ -15,7 +15,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F05 | Designreferenz verfügbar machen | verified | Nutzerbild reference/template.webp am 17.10.2026 sichtbar; u01-design-spec.md |
 | A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
 | A02 | Verträge technisch verankern | in_progress | A02a und A02b1 verified/integrated: PR12 als ea87e4a7, 12 Jest-/22 Pythonvertragstests, vollständiger Web-/Chromiumpass und Pythonmatrix; Transport/Gesamtparität offen |
-| P01 | Lokalen Anbieter kapseln | in_progress | P01a1 verified als transportfreier Slice: 82d9547 reviewed, 25 Tests/Lint und volle CI erfolgreich, PR 9 als 1995a5c integriert; reale Session/Resolver/Hardware offen |
+| P01 | Lokalen Anbieter kapseln | in_progress | P01a1-Adapter und P01b1-Katalog verified/integrated: PR9 als1995a5c, PR14 alse2eecd53 mit23 Katalogtests/175 Gesamtprüfungen und voller CI; reale Session/MPD-Übergabe/Hardware offen |
 | P02 | Quellenwechsel als Hardwareversuch | planned | Noch keine Produktumsetzung |
 | P03 | Playlist- und Queue-Speicherung | verified | Alle 15 Speicheraktionen, 36 Storetests + 22 Contracts, Python 3.9–3.13 und Review bestanden; PR 4/5/6 integriert, transportfreier Slice |
 | P04 | Serialisierte Wiedergabe und Abbruch | planned | Noch keine Produktumsetzung |
@@ -29,7 +29,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | S04 | Ablauf und erneute Anmeldung | planned | Noch keine Produktumsetzung |
 | U01 | Visuelles Konzept anhand der Vorlage | verified | Tatsächliches Nutzerbild und Entwurf von Root sowie unabhängigem Reviewer anhand echter Screenshots verglichen; u01-design-spec.md |
 | U02 | Shell, Theme und Navigation | in_progress | U02a/b als gerätefreie Vorschau verified/integrated: e61a63e (PR11), vollständiger Web-/Chromiumpass und beide Pythonmatrices; Liveanschluss offen |
-| U03 | Lokale Bibliothek anzeigen | planned | Noch keine Produktumsetzung |
+| U03 | Lokale Bibliothek anzeigen | in_progress | P01b1-Katalog integriert; U03a1 authentifizierte Lese-API test-first bei Luna, echte Reactansicht danach |
 | U04 | Upload und Indexierung | planned | Noch keine Produktumsetzung |
 | U05 | Liveplayer, Warteschlange und Playlists | planned | Noch keine Produktumsetzung |
 | U06 | Spotify-Unterseite | planned | Noch keine Produktumsetzung |
@@ -268,3 +268,21 @@ Alle Worker beendet; Root veröffentlicht den Dokumentationscheckpoint. Weitere 
 ### Ergänzte Gerätedaten vom Nutzer
 
 Die eingefügte /etc/os-release-Ausgabe bestätigt Raspbian GNU/Linux 13 (trixie), VERSION_ID=13 und DEBIAN_VERSION_FULL=13.6. Audioausgang ist HiFiBerry MiniAmp. Originaler Zero W, 32 Bit und PiSugar 2 mit zwei LEDs bleiben verbindlich. Die separate Test-SD klärt der Nutzer erst vor den Gerätetests; aktuell keine erneute Nachfrage und keine Neuinstallation auf der Bestandskarte. Aktive Audio-/ALSA-/MPD-Konfiguration und tatsächlicher Forkbetrieb unter ARMv6/Trixie bleiben vor der Hardwarefreigabe nachzuweisen. Die bisherige Bookworm-ARMv7-CI ist dafür kein Ersatz. Das Geräteprofil im Fork wird aktualisiert; lokale F04-Datei meldete beim Schreiben Dateizugriff verweigert, keine Rechteänderung vorgenommen. Diese operative Statusliste enthält die aktuellen Angaben. Unabhängige Softwareentwicklung kann fortgesetzt werden.
+
+### P01b1 – persistente Bibliotheksidentität gestartet
+
+Nutzer hat nach bestätigtem Raspbian13/trixie und MiniAmp die Softwareentwicklung erneut freigegeben. Root setzt den kleinen Bibliotheksidentitäts-/Rootresolververtrag um; der zusätzliche reine Metadatenadapter ohne IDs bleibt verworfen. Plan p01b-library-catalog-plan.md ist auf Basis ea87e4a7e0a4a6f16119e440f8c797c45d866d0c reviewed und für vier neue Dateien freigegeben. Erst Tests/echter RED, dann Luna-Modul, serielles Review und volle Python-CI. Kein Playerstart, Endpoint oder Systemeingriff. Statidentität und tatsächlicher späterer MPD-open bleiben getrennte Nachweise. Aktuell maximal Root plus ein Worker; kein automatischer Timer oder garantierter Restquota behauptet.
+
+P01b1-Phase1 ist alsafddd7a6934436304b3de107e1d930b4760d62bc auf future3/feature-library-catalog veröffentlicht, Treed27c910afd16285d2d31a1b6963ea6eb2e20586f. 21 deklarierte Tests, Root-/unabhängiges V3lint erfolgreich und echtes erwartetes Linux-CI-RED39030460679/117389696705 am fehlenden Katalogmodul. Unabhängiges Testreview ohne P1/P2. Root hat erst danach Luna für die zwei neuen Quelldateien freigegeben; kein PR-Merge oder Produktpass. Lokales WSL meldet Zugriff verweigert, vollständige CI bleibt nötig. Keine Änderungen am Pi, keine neue Endpoint-/Playermethode. Ressourcen: Root plus ein aktiver Luna-Coder; Reviewer schließt seinen Prosabericht ab, keine parallele Codeprüfung desselben Slices.
+
+P01b1-Implementierung als7a1dd4098054b9a28da0349061f88daeb444a8b9 (Treecea7e5be66c7976ad3ce50fc9398884f31888f96) in Draft-PR14 veröffentlicht. Alle vier Projektdateien identisch zurückgelesen; Root-Windowscheck2pass/19Linuxskip und V3lint erfolgreich. Die volle Linux-CI39030950262/39030953204 läuft separat. Unabhängiges Source-Review findet zwei P2: Registerbeobachtung einer fehlenden/unerlaubten Datei wird nicht permanent tombstoniert, und fremde View-only-DB wird als leer initialisiert. Kein Merge. Luna ergänzt zuerst ausschließlich zwei Regressionen im bestehenden Testfile, Quelle bleibt unverändert bis Root den echten neuen Linux-RED nachgewiesen hat. Danach enge Quellkorrektur und serielles Folgereview.
+
+U03-Lese-API ist unabhängig als Prosa vorbereitet (u03-library-api-plan.md), keine Codingfreigabe vor integriertem Katalog. Authentifizierte List/Get-Operationen, keine Resolver-/Import-/Playbackroute; vorhandenes nginx bleibt späterer Same-origin-Weg. Keine LANfreigabe, Tokenausgabe oder neue Dienste aus dieser Planung.
+
+P01b1-Regressionsstand d0ebb8598c8dc1fe584dea370389564475ed0772 ist in beiden tatsächlichen Linuxläufen rot:39031175203/117391760598 (3.11) und39031172465/117391752153 (3.12) scheitern exakt an den zwei neuen Assertions (AVAILABLE statt MISSING; fremde View-only-DB akzeptiert). Erst danach erfolgte der enge Luna-Quellfix. Aktueller Headb4a4294353eb27d0bdda5c24d742262eff3804ab, Tree8ccedafaab19e7d748d5a814c341e0b0912341a3; nurcatalog.py wurde korrigiert. Alle vier finalen Dateien identisch zurückgelesen. Unabhängiges serielles Folgereview schließt beide P2 ohne neuen Blocker, Root-V3lint grün. Neue volle Linux-CI bleibt offen; kein Merge vor tatsächlichem Pass. Die robuste Behandlung nachträglich beschädigter interner Integer-TEXT-Felder ist als kleiner Hinweis unter der vertrauenswürdigen Storevoraussetzung zurückgestellt, kein versteckter dritter Blocker. Keine Worker aktiv.
+
+### P01b1 integriert, U03a1 Lese-API freigegeben
+
+PR14 ist nach zwei vollständig erfolgreichen Python3.9–3.13-Matrizen samt finish (39031347317/39031345429), V3lint und unabhängigem finalem Folgereview als e2eecd531618389e05f61939ba432a3357e9980d integriert. Root bestätigt identischen Mergebaum8ccedafaab19e7d748d5a814c341e0b0912341a3. Job117392253949 belegt175 bestandene Tests einschließlich aller23 Katalogtests und beiden vorher tatsächlich rot bestätigten Regressionen. Verified ist nur der lokale Katalog-/Resolver-Slice; P01-Gesamt und U03-GUI bleiben offen.
+
+Root gibt U03a1 gemäß u03-library-api-plan.md für vier neue Dateien auf dieser Basis frei: authentifizierte Loopback-GET-Liste/Get, keine Schreib-/Resolve-/Playbackroute. Erst portabler Teststand und tatsächlich lokaler RED, dann drei Quelldateien; abschließend echter HTTPpass und vollständige Linuxmatrix vor Integration. Eigener Teilstage u03-api, allein Luna codiert. Kein Gerätedienst, echte Secretveröffentlichung, nginx-/LAN-/HTTPSwechsel oder SDbedarf aus diesem Auftrag.
