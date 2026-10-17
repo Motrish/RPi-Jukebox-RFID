@@ -140,6 +140,68 @@ def assert_no_overflow(page):
     require(sizes["scroll"] <= sizes["width"], f"Horizontal overflow: {sizes}")
 
 
+def wait_for_focus(page, selector):
+    page.wait_for_function(
+        "selector => { const target = document.querySelector(selector); "
+        "return Boolean(target) && document.activeElement === target; }",
+        arg=selector,
+    )
+
+
+def wait_for_menu_closed(page):
+    page.wait_for_function(
+        "document.querySelector('.menu-toggle')?.getAttribute('aria-expanded') === 'false'"
+    )
+    page.locator("#preview-sidebar").wait_for(state="hidden")
+
+
+def wait_for_menu_open(page):
+    page.wait_for_function(
+        "document.querySelector('.menu-toggle')?.getAttribute('aria-expanded') === 'true'"
+    )
+
+
+def assert_preview_clean(report):
+    require(not report["websockets"], f"Preview opened WebSockets: {report['websockets']}")
+    require(not report["blocked_requests"],
+            f"Preview attempted non-allowlisted HTTP requests: {report['blocked_requests']}")
+    require(not report["console_errors"], f"Preview console errors: {report['console_errors']}")
+    require(not report["page_errors"], f"Preview page errors: {report['page_errors']}")
+
+
+def test_final_guard_detects_late_request(context, base_url):
+    report = {
+        "http_requests": [],
+        "blocked_requests": [],
+        "websockets": [],
+        "console_errors": [],
+        "page_errors": [],
+    }
+    page = context.new_page()
+    pin_test_locale(page)
+    attach_browser_errors(page, report)
+    preview_network_guard(page, base_url, report)
+    page.goto(f"{base_url}#/design-preview/start", wait_until="networkidle")
+    page.locator(".design-preview").wait_for()
+    parsed_base = urlparse(base_url)
+    probe_url = f"{parsed_base.scheme}://{parsed_base.netloc}/api/__u02_late_guard_probe"
+    result = page.evaluate(
+        "url => fetch(url).then(() => 'unexpected').catch(() => 'blocked')",
+        probe_url,
+    )
+    require(result == "blocked", "Late-guard probe was not blocked by the browser route")
+    require(any("/__u02_late_guard_probe" in url for url in report["blocked_requests"]),
+            "Late-guard probe was not recorded by the request guard")
+    try:
+        assert_preview_clean(report)
+    except AssertionError as error:
+        require("non-allowlisted HTTP requests" in str(error),
+                f"Late-guard probe failed for an unrelated reason: {error}")
+    else:
+        raise AssertionError("Final preview guard accepted a forbidden late request")
+    page.close()
+
+
 def test_routes_brand_and_player(page, base_url):
     page.goto(f"{base_url}#/design-preview", wait_until="networkidle")
     page.locator(".design-preview").wait_for()
@@ -238,20 +300,41 @@ def test_search_and_battery(page, base_url):
 def test_mobile_menu(page, base_url):
     page.set_viewport_size({"width": 390, "height": 844})
     page.goto(f"{base_url}#/design-preview/start", wait_until="networkidle")
-    toggle = page.get_by_role("button", name="Menü öffnen")
-    toggle.click()
-    require(page.get_by_role("link", name="RFID", exact=True).is_visible(), "Mobile menu did not open")
+    toggle = page.locator(".menu-toggle")
+    start_link = page.locator('#preview-sidebar .nav-item[aria-current="page"]')
+    toggle.focus()
+    page.keyboard.press("Enter")
+    wait_for_menu_open(page)
+    require(start_link.is_visible(), "Enter did not open the mobile navigation")
+    wait_for_focus(page, '#preview-sidebar .nav-item[aria-current="page"]')
     page.keyboard.press("Escape")
-    require(page.get_by_role("button", name="Menü öffnen").evaluate("el => document.activeElement === el"),
-            "Escape did not return focus to the menu toggle")
+    wait_for_menu_closed(page)
+    wait_for_focus(page, ".menu-toggle")
+    page.keyboard.press("Space")
+    wait_for_menu_open(page)
+    wait_for_focus(page, '#preview-sidebar .nav-item[aria-current="page"]')
+    require(page.locator('#preview-sidebar .nav-item[aria-current="page"]').is_visible(),
+            "Space opened the menu without exposing the active route")
+    rfid_link = page.get_by_role("link", name="RFID", exact=True)
+    for _ in range(4):
+        page.keyboard.press("Tab")
+    require(rfid_link.evaluate("el => document.activeElement === el"),
+            "Tab from the active item did not reach the next visible sidebar link")
+    page.keyboard.press("Enter")
+    page.get_by_role("heading", name="RFID").wait_for()
+    wait_for_menu_closed(page)
+    wait_for_focus(page, ".menu-toggle")
+    page.keyboard.press("Enter")
+    wait_for_menu_open(page)
+    wait_for_focus(page, '#preview-sidebar .nav-item[aria-current="page"]')
+    require(page.locator('#preview-sidebar .nav-item[aria-current="page"]').is_visible(),
+            "Reopened menu did not expose the active route")
+    page.keyboard.press("Escape")
+    wait_for_menu_closed(page)
+    wait_for_focus(page, ".menu-toggle")
     page.keyboard.press("Tab")
     require(page.locator("#preview-sidebar").evaluate("el => !el.contains(document.activeElement)"),
             "Closed mobile navigation still receives keyboard focus")
-    page.get_by_role("button", name="Menü öffnen").click()
-    page.get_by_role("link", name="RFID", exact=True).click()
-    page.get_by_role("heading", name="RFID").wait_for()
-    require(not page.get_by_role("button", name="Menü schließen").is_visible(),
-            "Mobile menu remained open after navigation")
     assert_no_overflow(page)
 
 
@@ -312,6 +395,9 @@ def run(args):
                     print(line)
             page.set_viewport_size({"width": 320, "height": 800})
             assert_no_overflow(page)
+            test_final_guard_detects_late_request(context, base_url)
+            report["checks"].append("final guard rejects a late forbidden HTTP request")
+            assert_preview_clean(report)
             context.close()
 
             legacy_report = {

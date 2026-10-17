@@ -194,6 +194,13 @@ function PreviewShell() {
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!menuOpen) return;
+    const activeLink = document.querySelector('#preview-sidebar .nav-item[aria-current="page"]');
+    const firstLink = document.querySelector('#preview-sidebar .nav-item');
+    (activeLink || firstLink)?.focus();
+  }, [menuOpen]);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
         if (menuOpen) {
@@ -234,6 +241,9 @@ function PreviewShell() {
 
   function closeMenu() {
     setMenuOpen(false);
+    if (menuToggleRef.current && window.getComputedStyle(menuToggleRef.current).display !== 'none') {
+      menuToggleRef.current.focus();
+    }
   }
 
   return (
@@ -263,7 +273,7 @@ function PreviewShell() {
               aria-label={menuOpen ? 'Menü schließen' : 'Menü öffnen'}
               aria-expanded={menuOpen}
               aria-controls="preview-sidebar"
-              onClick={() => setMenuOpen(true)}
+              onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             >☰</button>
             <div className="breadcrumbs"><span className="breadcrumb-kicker">DEINE MUSIK</span><span className="breadcrumb-current">{ROUTES.find((route) => route.path === `/${currentView}`)?.label || 'Start'}</span></div>
             <label className="search-box" htmlFor="preview-search">
