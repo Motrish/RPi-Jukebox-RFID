@@ -14,6 +14,7 @@ from pathlib import Path
 import select
 import signal
 import socket
+import socketserver
 import subprocess
 import sys
 import tempfile
@@ -233,6 +234,128 @@ class LauncherCliTests(unittest.TestCase):
         self.assertNotIn("private-payload-7d31", combined)
         self.assertNotIn("Traceback", combined)
 
+    def test_foreign_204_after_port_check_requires_owned_response_marker(self):
+        requests = []
+
+        class ForeignHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                self.send_response(204)
+                self.send_header("X-I01B-Owned-Instance",
+                                 self.headers.get("X-I01B-Readiness", ""))
+                self.end_headers()
+
+            def log_message(self, _format, *_args):
+                return
+
+        foreign = ThreadingHTTPServer(("127.0.0.1", 0), ForeignHandler)
+        foreign_thread = threading.Thread(target=foreign.serve_forever, daemon=True)
+        foreign_thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                arguments = self.base_args(temporary, foreign.server_address[1])
+                arguments.extend(["--nginx-binary", sys.executable])
+
+                class CompletedConfig:
+                    returncode = 0
+
+                    def communicate(self, timeout=None):
+                        return "", ""
+
+                class RacedChild:
+                    returncode = None
+                    polls = 0
+
+                    def poll(self):
+                        self.polls += 1
+                        return None if self.polls < 4 else 1
+
+                    def wait(self, timeout=None):
+                        self.returncode = 1
+                        return self.returncode
+
+                    def terminate(self):
+                        self.returncode = -15
+
+                    def kill(self):
+                        self.returncode = -9
+
+                child = RacedChild()
+
+                def popen_factory(command, **_kwargs):
+                    return CompletedConfig() if "-t" in command else child
+
+                output = StringIO()
+                errors = StringIO()
+                with mock.patch.object(launch, "_assert_outer_port_available"):
+                    with mock.patch.object(launch, "_READY_TIMEOUT", 0.5):
+                        with redirect_stdout(output), redirect_stderr(errors):
+                            result = launch.run(arguments, popen_factory=popen_factory)
+                self.assertNotEqual(result, 0)
+                self.assertNotIn("http://127.0.0.1:{}/setup/".format(foreign.server_address[1]),
+                                 output.getvalue())
+                self.assertNotIn("/#/design-preview", output.getvalue())
+                self.assertTrue(requests)
+                self.assertNotIn("Traceback", output.getvalue() + errors.getvalue())
+        finally:
+            foreign.shutdown()
+            foreign.server_close()
+            foreign_thread.join(timeout=2)
+
+    def test_readiness_bounds_slow_and_oversized_foreign_headers(self):
+        class RawResponseHandler(socketserver.BaseRequestHandler):
+            mode = ""
+
+            def handle(self):
+                self.request.recv(4096)
+                if self.mode == "slow":
+                    chunks = [b"HTTP/1.1 204 No Content\r\n", b"X-I01B-Owned-Instance: expected\r\n", b"\r\n"]
+                    for chunk in chunks:
+                        try:
+                            self.request.sendall(chunk)
+                        except OSError:
+                            return
+                        time.sleep(0.08)
+                else:
+                    response = (b"HTTP/1.1 204 No Content\r\nX-Padding: " + b"x" * 12000
+                                + b"\r\nX-I01B-Owned-Instance: expected\r\n\r\n")
+                    try:
+                        self.request.sendall(response)
+                    except OSError:
+                        return
+
+        class RawServer(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        for mode in ("slow", "oversized"):
+            with self.subTest(mode=mode):
+                handler = type("ResponseHandler", (RawResponseHandler,), {"mode": mode})
+                foreign = RawServer(("127.0.0.1", 0), handler)
+                foreign_thread = threading.Thread(target=foreign.serve_forever, daemon=True)
+                foreign_thread.start()
+                try:
+                    child = mock.Mock()
+                    child.poll.return_value = None
+                    started = time.monotonic()
+                    with mock.patch.object(launch, "_READY_TIMEOUT", 0.12):
+                        ready = launch._wait_ready(
+                            child, foreign.server_address[1], "expected", threading.Event(),
+                        )
+                    elapsed = time.monotonic() - started
+                    self.assertFalse(ready)
+                    self.assertLess(elapsed, 0.3)
+                finally:
+                    foreign.shutdown()
+                    foreign.server_close()
+                    foreign_thread.join(timeout=2)
+
+    def test_forbidden_response_body_check_distinguishes_spa_from_nginx_error_html(self):
+        spa_index = b"<!doctype html><html><body><div id='root'></div></body></html>"
+        nginx_error = b"<html><body><h1>400 Bad Request</h1></body></html>"
+        self.assertFalse(is_spa_index_response(nginx_error, spa_index))
+        self.assertTrue(is_spa_index_response(spa_index, spa_index))
+
     @unittest.skipUnless(os.name == "posix", "nginx process failure check runs on Linux CI")
     def test_nginx_config_test_failure_leaves_no_listener_or_private_stage(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -292,6 +415,10 @@ def raw_http(port, target, headers=(), method="GET"):
     return result
 
 
+def is_spa_index_response(body, index_html):
+    return bool(index_html) and body == index_html
+
+
 def wait_for_ready(process, port, deadline):
     output = []
     expected_urls = ("http://127.0.0.1:{}/setup/".format(port), "/#/design-preview")
@@ -312,6 +439,11 @@ def wait_for_ready(process, port, deadline):
 
 def verify_http_matrix(port):
     good = "127.0.0.1:{}".format(port)
+    index_status, _index_headers, index_html = raw_http(
+        port, "/index.html", [("Host", good)],
+    )
+    if index_status != 200 or not index_html:
+        raise AssertionError("verified React index was not available for negative-route comparison")
     cases = [
         ("/setup/", [("Host", good)], "GET", (200,)),
         ("/api/preflight", [("Host", good)], "GET", (200,)),
@@ -339,16 +471,23 @@ def verify_http_matrix(port):
         ("/%2e%2e/etc/passwd", [("Host", good)], "GET", (400, 404)),
     ]
     for target, headers, method, accepted in cases:
-        status, _response_headers, body = raw_http(port, target, headers, method)
+        status, response_headers, body = raw_http(port, target, headers, method)
         if status not in accepted:
-            raise AssertionError("unexpected HTTP status for {}: {}".format(target, status))
+            raise AssertionError(
+                "unexpected HTTP status for {}: {} (accepted {}; headers={!r})".format(
+                    target, status, accepted, response_headers,
+                )
+            )
         reject_spa = target.startswith(("/unknown", "/api/unknown", "/admin", "/rpc", "/ws", "/logs", "/setup"))
         reject_spa = reject_spa or target.startswith("http://")
         if reject_spa and status >= 400:
             if status < 400:
                 raise AssertionError("forbidden route returned a success response: {}".format(target))
-            if b"<html" in body.lower():
-                raise AssertionError("forbidden route returned SPA HTML: {}".format(target))
+            if is_spa_index_response(body, index_html):
+                raise AssertionError(
+                    "forbidden route returned verified SPA index: {} (status {}; accepted {}; "
+                    "headers={!r})".format(target, status, accepted, response_headers)
+                )
         if target == "/api/preflight" and status == 200:
             payload = json.loads(body)
             if payload.get("schema") != "websetup.preflight.v1" or "facts" not in payload:

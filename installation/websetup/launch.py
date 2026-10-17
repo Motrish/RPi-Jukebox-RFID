@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import http.client
 import os
 from pathlib import Path
 import shutil
 import secrets
+import select
 import signal
 import socket
 import subprocess
@@ -26,6 +26,8 @@ from installation.websetup import bundle, server  # noqa: E402
 from tools.web_bundle import BundleError  # noqa: E402
 
 _READY_TIMEOUT = 8.0
+_READY_HEADER_LIMIT = 8192
+_READY_HEADER_COUNT_LIMIT = 64
 _NGINX_TEST_TIMEOUT = 8.0
 _CHILD_STOP_TIMEOUT = 2.0
 
@@ -38,7 +40,7 @@ _TEMPLATE_TOKENS = {
     "@@BOOTSTRAP_LISTEN_PORT@@": "listen_port",
     "@@BOOTSTRAP_UPSTREAM_PORT@@": "upstream_port",
     "@@BOOTSTRAP_WEBROOT@@": "webroot",
-    "@@BOOTSTRAP_READY_TOKEN@@": "ready_token",
+    "@@BOOTSTRAP_INSTANCE_MARKER@@": "instance_marker",
 }
 
 
@@ -73,7 +75,7 @@ def _nginx_quote(value: str) -> str:
 
 
 def _render_config(template_path: Path, destination: Path, listen_port: int,
-                   upstream_port: int, webroot: Path, ready_token: str) -> None:
+                   upstream_port: int, webroot: Path, instance_marker: str) -> None:
     try:
         source = template_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -82,7 +84,7 @@ def _render_config(template_path: Path, destination: Path, listen_port: int,
         "@@BOOTSTRAP_LISTEN_PORT@@": str(listen_port),
         "@@BOOTSTRAP_UPSTREAM_PORT@@": str(upstream_port),
         "@@BOOTSTRAP_WEBROOT@@": _nginx_quote(str(webroot)),
-        "@@BOOTSTRAP_READY_TOKEN@@": ready_token,
+        "@@BOOTSTRAP_INSTANCE_MARKER@@": instance_marker,
     }
     for token, value in replacements.items():
         if source.count(token) != 1:
@@ -140,28 +142,100 @@ def _nginx_config_test(popen_factory: Callable, executable: str,
         raise _SafeLaunchError("nginx rejected the private configuration")
 
 
-def _wait_ready(process: subprocess.Popen, port: int, ready_token: str,
+def _parse_response_headers(header: bytes):
+    try:
+        lines = header.decode("iso-8859-1").split("\r\n")
+    except UnicodeError:
+        return None
+    if not lines:
+        return None
+    status_parts = lines[0].split(" ", 2)
+    if (len(status_parts) < 2 or status_parts[0] not in ("HTTP/1.0", "HTTP/1.1")
+            or len(status_parts[1]) != 3 or not status_parts[1].isdigit()):
+        return None
+    headers = []
+    for line in lines[1:]:
+        if not line or line[0] in " \t" or ":" not in line:
+            return None
+        name, value = line.split(":", 1)
+        if not name or len(headers) >= _READY_HEADER_COUNT_LIMIT:
+            return None
+        headers.append((name.lower(), value.strip(" \t")))
+    return int(status_parts[1]), headers
+
+
+def _read_response_headers(connection: socket.socket, deadline: float):
+    data = bytearray()
+    delimiter = b"\r\n\r\n"
+    while delimiter not in data:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        readable, _writable, _exceptional = select.select([connection], [], [], remaining)
+        if not readable:
+            return None
+        chunk = connection.recv(min(2048, _READY_HEADER_LIMIT + 1 - len(data)))
+        if not chunk:
+            return None
+        data.extend(chunk)
+        if len(data) > _READY_HEADER_LIMIT:
+            return None
+    header, _body_prefix = data.split(delimiter, 1)
+    return _parse_response_headers(bytes(header))
+
+
+def _readiness_response(port: int, deadline: float):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
+    try:
+        connection = socket.create_connection(
+            ("127.0.0.1", port), timeout=min(0.25, remaining),
+        )
+    except OSError:
+        return None
+    request = (
+        "GET /setup/ HTTP/1.1\r\n"
+        "Host: 127.0.0.1:{}\r\n"
+        "X-I01B-Readiness: probe\r\n"
+        "Connection: close\r\n\r\n"
+    ).format(port).encode("ascii")
+    try:
+        connection.setblocking(False)
+        offset = 0
+        while offset < len(request):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            _readable, writable, _exceptional = select.select([], [connection], [], remaining)
+            if not writable:
+                return None
+            sent = connection.send(request[offset:])
+            if sent <= 0:
+                return None
+            offset += sent
+        return _read_response_headers(connection, deadline)
+    except (OSError, ValueError):
+        return None
+    finally:
+        connection.close()
+
+
+def _wait_ready(process: subprocess.Popen, port: int, instance_marker: str,
                 stop_requested: threading.Event) -> bool:
     deadline = time.monotonic() + _READY_TIMEOUT
     while time.monotonic() < deadline and not stop_requested.is_set():
         if process.poll() is not None:
             return False
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)
-        try:
-            connection.request(
-                "GET", "/setup/",
-                headers={"Host": "127.0.0.1:{}".format(port),
-                         "X-I01B-Readiness": ready_token},
-            )
-            response = connection.getresponse()
-            response.read()
-            if response.status == 204 and process.poll() is None:
+        response = _readiness_response(port, deadline)
+        if response is not None:
+            status, headers = response
+            markers = [value for name, value in headers if name == "x-i01b-owned-instance"]
+            if status == 204 and markers == [instance_marker] and process.poll() is None:
                 return True
-        except (OSError, http.client.HTTPException):
-            pass
-        finally:
-            connection.close()
-        stop_requested.wait(0.05)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            stop_requested.wait(min(0.05, remaining))
     return False
 
 
@@ -186,9 +260,9 @@ def _stop_upstream(httpd, thread: Optional[threading.Thread]) -> None:
     httpd.server_close()
 
 
-def _wait_until_stopped(child: subprocess.Popen, args: argparse.Namespace, ready_token: str,
+def _wait_until_stopped(child: subprocess.Popen, args: argparse.Namespace, instance_marker: str,
                         stop_requested: threading.Event) -> int:
-    if not _wait_ready(child, args.port, ready_token, stop_requested):
+    if not _wait_ready(child, args.port, instance_marker, stop_requested):
         if stop_requested.is_set():
             return 0
         if child.poll() is not None:
@@ -221,8 +295,8 @@ def _serve_verified_bundle(args: argparse.Namespace, webroot: Path,
         if not 1 <= upstream_port <= 65535:
             raise _SafeLaunchError("the local preflight listener returned an invalid port")
         template = CHECKOUT_ROOT / "resources" / "default-settings" / "nginx.bootstrap-loopback.conf"
-        ready_token = secrets.token_hex(32)
-        _render_config(template, config, args.port, upstream_port, webroot, ready_token)
+        instance_marker = secrets.token_hex(32)
+        _render_config(template, config, args.port, upstream_port, webroot, instance_marker)
         _nginx_config_test(popen_factory, executable, prefix, config)
         if stop_requested.is_set():
             return 0
@@ -235,7 +309,7 @@ def _serve_verified_bundle(args: argparse.Namespace, webroot: Path,
             )
         except OSError:
             raise _SafeLaunchError("nginx could not start") from None
-        return _wait_until_stopped(child, args, ready_token, stop_requested)
+        return _wait_until_stopped(child, args, instance_marker, stop_requested)
     finally:
         if child is not None:
             _finish_process(child, _CHILD_STOP_TIMEOUT)
