@@ -297,6 +297,36 @@ class BundleIntakeTests(unittest.TestCase):
         self.assertIs(raised.exception, failure)
         self.assertEqual(list(self.parent.iterdir()), [])
 
+    def test_common_consumer_exceptions_keep_identity_and_remove_private_tree(self):
+        for failure in (ValueError("value sentinel"), OSError("os sentinel")):
+            with self.subTest(error=type(failure).__name__):
+                with self.assertRaises(type(failure)) as raised:
+                    with self.run_staged():
+                        raise failure
+                self.assertIs(raised.exception, failure)
+                self.assertEqual(list(self.parent.iterdir()), [])
+
+    def test_invalid_deflate_stream_is_a_bundle_error_and_cleans_private_tree(self):
+        compressed = bytearray(gzip.compress(b"not a tar", mtime=0))
+        compressed[10] = (compressed[10] & 0xF8) | 0x06  # reserved DEFLATE block type
+        self.archive.write_bytes(compressed)
+        self.write_manifest()
+        self.assert_rejected_and_clean()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX file mode contract")
+    def test_extracted_file_modes_ignore_a_restrictive_caller_umask(self):
+        self.write_archive(self.valid_members())
+        previous_umask = os.umask(0o077)
+        try:
+            with self.run_staged() as webroot:
+                caller_umask = os.umask(0)
+                os.umask(caller_umask)
+                self.assertEqual(caller_umask, 0o077)
+                self.assertEqual(stat.S_IMODE((webroot / "index.html").stat().st_mode), 0o644)
+                self.assertEqual(stat.S_IMODE((webroot / "static/js/app.js").stat().st_mode), 0o644)
+        finally:
+            os.umask(previous_umask)
+
     def test_wrong_independent_identity_is_rejected(self):
         self.assertIs(BundleError, web_bundle.BundleError)
         self.assert_rejected_and_clean(expected_repository="other-owner/phoniebox")
@@ -396,6 +426,10 @@ class BundleIntakeTests(unittest.TestCase):
                     {path.relative_to(self.build): path.read_bytes()
                      for path in self.build.rglob("*") if path.is_file()},
                 )
+
+    def test_c1_unicode_control_path_is_rejected(self):
+        self.write_archive([("index.html", b"ok"), ("static/bad\u0085name.js", b"bad")])
+        self.assert_rejected_and_clean()
 
     def test_pax_path_is_validated_after_expansion(self):
         item = tarfile.TarInfo("placeholder")

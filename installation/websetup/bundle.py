@@ -12,6 +12,8 @@ import stat
 import tarfile
 import tempfile
 from typing import BinaryIO, Iterator, Optional
+import unicodedata
+import zlib
 
 from tools.web_bundle import BundleError, MAX_ARCHIVE_BYTES, MAX_FILES, MAX_MANIFEST_BYTES
 from tools.web_bundle import MAX_TOTAL_INPUT_BYTES as _PRODUCER_MAX_TOTAL_INPUT_BYTES
@@ -88,7 +90,7 @@ def _safe_path(value: str) -> tuple[str, ...]:
         raise BundleError("archive contains an invalid path")
     if value.startswith("/") or "\\" in value or ":" in value:
         raise BundleError("archive contains an unsafe path")
-    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+    if any(unicodedata.category(character) == "Cc" for character in value):
         raise BundleError("archive contains an unsafe path")
     parts = value.split("/")
     if any(part in ("", ".", "..") for part in parts):
@@ -284,6 +286,35 @@ def _tar_members(reader: _TarReader) -> Iterator[tuple[tarfile.TarInfo, str]]:
         yield info, name
 
 
+def _extract_member(reader: _TarReader, webroot: Path, info: tarfile.TarInfo,
+                    name: str, count: int, aggregate: int, files: set[str],
+                    directories: set[str], insensitive: bool) -> tuple[int, int]:
+    parts = _safe_path(name)
+    if info.size < 0 or info.size > MAX_TOTAL_INPUT_BYTES - aggregate:
+        raise BundleError("bundle contents exceed the size limit")
+    count += 1
+    if count > MAX_FILES:
+        raise BundleError("bundle contains too many files")
+    target = _make_output_path(webroot, parts, directories, files, set(), insensitive)
+    descriptor = os.open(
+        str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        | getattr(os, "O_BINARY", 0), 0o644,
+    )
+    try:
+        if os.name == "posix":
+            os.fchmod(descriptor, 0o644)
+        with os.fdopen(descriptor, "wb") as output:
+            aggregate = reader.payload_to(output, info.size, aggregate)
+    except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise
+    reader.discard_zeros((-info.size) % _TAR_BLOCK_BYTES)
+    return count, aggregate
+
+
 def _extract(archive_path: Path, webroot: Path, expected_count: int) -> None:
     count = 0
     aggregate = 0
@@ -294,32 +325,16 @@ def _extract(archive_path: Path, webroot: Path, expected_count: int) -> None:
         with archive_path.open("rb") as raw, gzip.GzipFile(fileobj=raw, mode="rb") as compressed:
             reader = _TarReader(compressed)
             for info, name in _tar_members(reader):
-                parts = _safe_path(name)
-                if info.size < 0 or info.size > MAX_TOTAL_INPUT_BYTES - aggregate:
-                    raise BundleError("bundle contents exceed the size limit")
-                count += 1
-                if count > MAX_FILES:
-                    raise BundleError("bundle contains too many files")
-                target = _make_output_path(webroot, parts, directories, files, set(), insensitive)
-                descriptor = os.open(
-                    str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                    | getattr(os, "O_BINARY", 0), 0o644,
+                count, aggregate = _extract_member(
+                    reader, webroot, info, name, count, aggregate, files,
+                    directories, insensitive,
                 )
-                try:
-                    with os.fdopen(descriptor, "wb") as output:
-                        aggregate = reader.payload_to(output, info.size, aggregate)
-                except BaseException:
-                    try:
-                        os.close(descriptor)
-                    except OSError:
-                        pass
-                    raise
-                reader.discard_zeros((-info.size) % _TAR_BLOCK_BYTES)
             if count != expected_count or "index.html" not in files:
                 raise BundleError("archive file count or root index is invalid")
     except BundleError:
         raise
-    except (OSError, EOFError, gzip.BadGzipFile, tarfile.TarError, ValueError, OverflowError):
+    except (OSError, EOFError, gzip.BadGzipFile, tarfile.TarError, ValueError,
+            OverflowError, zlib.error):
         raise BundleError("archive could not be safely unpacked") from None
 
 
@@ -332,30 +347,31 @@ def staged_bundle(archive_path: os.PathLike[str] | str,
     """Copy, verify, and privately extract an already-downloaded bundle."""
     private_root: Optional[Path] = None
     try:
-        parent = Path(staging_parent)
-        parent_stat = parent.lstat()
-        if not stat.S_ISDIR(parent_stat.st_mode):
-            raise BundleError("staging parent is not a real directory")
-        parent = parent.resolve(strict=True)
-        private_root = Path(tempfile.mkdtemp(prefix=".web-bundle-", dir=str(parent)))
-        if os.name == "posix":
-            os.chmod(private_root, 0o700)
-        archive_copy = private_root / "archive.tar.gz"
-        manifest_copy = private_root / "manifest.json"
-        _copy_input(archive_path, archive_copy, MAX_ARCHIVE_BYTES)
-        _copy_input(manifest_path, manifest_copy, MAX_MANIFEST_BYTES)
-        manifest = verify_bundle(
-            archive_copy, manifest_copy, expected_repository, expected_commit
-        )
-        file_count = manifest["fileCount"]
-        webroot = private_root / "webroot"
-        webroot.mkdir(mode=0o700)
-        _extract(archive_copy, webroot, file_count)
+        try:
+            parent = Path(staging_parent)
+            parent_stat = parent.lstat()
+            if not stat.S_ISDIR(parent_stat.st_mode):
+                raise BundleError("staging parent is not a real directory")
+            parent = parent.resolve(strict=True)
+            private_root = Path(tempfile.mkdtemp(prefix=".web-bundle-", dir=str(parent)))
+            if os.name == "posix":
+                os.chmod(private_root, 0o700)
+            archive_copy = private_root / "archive.tar.gz"
+            manifest_copy = private_root / "manifest.json"
+            _copy_input(archive_path, archive_copy, MAX_ARCHIVE_BYTES)
+            _copy_input(manifest_path, manifest_copy, MAX_MANIFEST_BYTES)
+            manifest = verify_bundle(
+                archive_copy, manifest_copy, expected_repository, expected_commit
+            )
+            file_count = manifest["fileCount"]
+            webroot = private_root / "webroot"
+            webroot.mkdir(mode=0o700)
+            _extract(archive_copy, webroot, file_count)
+        except BundleError:
+            raise
+        except (OSError, TypeError, ValueError, KeyError, OverflowError):
+            raise BundleError("bundle could not be staged safely") from None
         yield webroot
-    except BundleError:
-        raise
-    except (OSError, TypeError, ValueError, KeyError, OverflowError):
-        raise BundleError("bundle could not be staged safely") from None
     finally:
         if private_root is not None:
             shutil.rmtree(private_root, ignore_errors=True)
