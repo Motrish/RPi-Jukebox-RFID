@@ -11,6 +11,7 @@ on:
         - '.github/workflows/test_build_webapp_v3.yml'
         - '.github/actions/build-webapp/**'
         - 'src/webapp/**'
+        - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
   pull_request:
     # The branches below must be a subset of the branches above
@@ -21,6 +22,7 @@ on:
         - '.github/workflows/test_build_webapp_v3.yml'
         - '.github/actions/build-webapp/**'
         - 'src/webapp/**'
+        - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
 
 jobs:
@@ -39,6 +41,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Test web app V1 contract seam
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/v1.test.js
 
       - name: Install Playwright test tool
         run: python -m pip install playwright==1.64.0
