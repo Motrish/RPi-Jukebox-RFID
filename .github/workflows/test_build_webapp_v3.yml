@@ -27,6 +27,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +47,9 @@ jobs:
         run: python -m playwright install --with-deps chromium
 
       - name: Test built React preview in Chromium
+        timeout-minutes: 3
         run: >-
-          python tests/design-preview/react_smoke.py
+          python -u tests/design-preview/react_smoke.py
           --serve-directory src/webapp/build
           --output-dir "${{ runner.temp }}/design-preview-react"
           --emit-preview-png-base64

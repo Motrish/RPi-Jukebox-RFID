@@ -23,6 +23,11 @@ ALLOWED_ROOT_PATHS = {
     "/locales/en/translation.json",
 }
 PNG_LOG_MARKER = "U02B_REACT_PREVIEW_PNG_BASE64_BEGIN"
+PROGRESS_LOG_MARKER = "U02B_PROGRESS:"
+
+
+def progress(message):
+    print(f"{PROGRESS_LOG_MARKER} {message}", flush=True)
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -198,7 +203,8 @@ def test_final_guard_detects_late_request(context, base_url):
     parsed_base = urlparse(base_url)
     probe_url = f"{parsed_base.scheme}://{parsed_base.netloc}/api/__u02_late_guard_probe"
     result = page.evaluate(
-        "url => fetch(url).then(() => 'unexpected').catch(() => 'blocked')",
+        "url => Promise.race([fetch(url).then(() => 'unexpected').catch(() => 'blocked'), "
+        "new Promise(resolve => setTimeout(() => resolve('timeout'), 5000))])",
         probe_url,
     )
     require(result == "blocked", "Late-guard probe was not blocked by the browser route")
@@ -234,6 +240,7 @@ def test_routes_brand_and_player(page, base_url):
     ):
         page.get_by_role("link", name=label, exact=True).click()
         page.get_by_role("heading", name=re.compile(re.escape(heading))).wait_for()
+        progress(f"preview route {label} passed")
 
     page.get_by_role("link", name="Musik", exact=True).click()
     page.get_by_role("button", name=re.compile("Leise Wellen")).first.click()
@@ -371,17 +378,28 @@ def run(args):
             browser = playwright.chromium.launch(headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 960})
             page = context.new_page()
+            page.set_default_timeout(15000)
+            page.set_default_navigation_timeout(15000)
+            progress("preview browser and context started")
             pin_test_locale(page)
             attach_browser_errors(page, report)
             preview_network_guard(page, base_url, report)
+            progress("preview routes and Brand navigation started")
             test_routes_brand_and_player(page, base_url)
             report["checks"].append("direct preview boot, seven routes, unknown path and keyboard Brand return")
+            progress("preview routes and Brand navigation passed")
+            progress("preview queue actions started")
             test_queue_and_mix(page, base_url)
             report["checks"].append("queue order matches selection, next, previous and mix actions")
+            progress("preview queue actions passed")
+            progress("preview search and PiSugar states started")
             test_search_and_battery(page, base_url)
             report["checks"].append("search empty/reset and all three PiSugar preview states")
+            progress("preview search and PiSugar states passed")
+            progress("preview mobile keyboard navigation started")
             test_mobile_menu(page, base_url)
             report["checks"].append("mobile menu, Escape focus return, Tab exclusion and 320px overflow")
+            progress("preview mobile keyboard navigation passed")
             require(not report["websockets"], f"Preview opened WebSockets: {report['websockets']}")
             require(not report["blocked_requests"],
                     f"Preview attempted non-allowlisted HTTP requests: {report['blocked_requests']}")
@@ -399,6 +417,7 @@ def run(args):
                 shot = output_dir / f"react-preview-{width}.png"
                 page.screenshot(path=str(shot), full_page=True)
                 report["screenshots"].append(str(shot))
+                progress(f"preview screenshot {width}px passed")
                 if width == 1440 and args.emit_preview_png_base64:
                     image = shot.read_bytes()
                     encoded = base64.b64encode(image).decode("ascii")
@@ -407,10 +426,14 @@ def run(args):
                     print(line)
             page.set_viewport_size({"width": 320, "height": 800})
             assert_no_overflow(page)
+            progress("preview 320px overflow check passed")
             test_final_guard_detects_late_request(context, base_url)
             report["checks"].append("final guard rejects a late forbidden HTTP request")
+            progress("preview late-request guard selfcheck passed")
             assert_preview_clean(report)
+            progress("preview final HTTP/WS/console/pageerror assertions passed")
             context.close()
+            progress("preview browser context closed")
 
             legacy_report = {
                 "http_requests": [],
@@ -422,6 +445,8 @@ def run(args):
             }
             legacy_context = browser.new_context(viewport={"width": 1280, "height": 900})
             legacy_page = legacy_context.new_page()
+            legacy_page.set_default_timeout(15000)
+            legacy_page.set_default_navigation_timeout(15000)
             pin_test_locale(legacy_page)
             attach_browser_errors(legacy_page, legacy_report)
             preview_network_guard(legacy_page, base_url, legacy_report, block_websockets=False)
@@ -431,8 +456,10 @@ def run(args):
                 socket.close(code=1000, reason="Mock legacy test transport")
 
             legacy_page.route_web_socket("**/*", mock_legacy_socket)
+            progress("legacy mocked-transport boot started")
             legacy_page.goto(f"{base_url}#/", wait_until="networkidle")
             legacy_page.locator("#routes").wait_for()
+            progress("legacy router rendered")
             legacy_page.locator(".MuiBottomNavigation-root").wait_for()
             require(legacy_page.locator(".design-preview").count() == 0,
                     "Legacy boot rendered the preview")
@@ -444,6 +471,7 @@ def run(args):
                     f"Legacy boot attempted non-allowlisted HTTP requests: {legacy_report['blocked_requests']}")
             require(not legacy_report["page_errors"],
                     f"Legacy boot raised page errors: {legacy_report['page_errors']}")
+            progress("legacy structure, mocked transport and error checks passed")
             report["legacy_mocked_websockets"] = legacy_report["legacy_mocked_websockets"]
             report["legacy_http_requests"] = legacy_report["http_requests"]
             report["legacy_blocked_requests"] = legacy_report["blocked_requests"]
@@ -451,7 +479,9 @@ def run(args):
             report["legacy_console_errors"] = legacy_report["console_errors"]
             report["checks"].append("legacy router and navigation load with mocked WebSocket transport")
             legacy_context.close()
+            progress("legacy context closed")
             browser.close()
+            progress("browser closed")
 
     if args.serve_directory:
         with LocalBuildServer(args.serve_directory) as base_url:
