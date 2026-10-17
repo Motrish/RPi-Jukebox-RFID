@@ -12,6 +12,16 @@ on:
         - '.github/actions/build-webapp/**'
         - 'tools/web_bundle.py'
         - 'test/web_bundle/test_web_bundle.py'
+        - 'installation/bootstrap-web.sh'
+        - 'installation/websetup/launch.py'
+        - 'installation/websetup/bundle.py'
+        - 'installation/websetup/server.py'
+        - 'installation/websetup/preflight.py'
+        - 'installation/websetup/index.html'
+        - 'test/websetup/test_launch.py'
+        - 'test/websetup/test_bundle.py'
+        - 'test/websetup/test_preflight.py'
+        - 'resources/default-settings/nginx.bootstrap-loopback.conf'
         - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
         - 'test/contracts/fixtures/v1.json'
@@ -26,6 +36,16 @@ on:
         - '.github/actions/build-webapp/**'
         - 'tools/web_bundle.py'
         - 'test/web_bundle/test_web_bundle.py'
+        - 'installation/bootstrap-web.sh'
+        - 'installation/websetup/launch.py'
+        - 'installation/websetup/bundle.py'
+        - 'installation/websetup/server.py'
+        - 'installation/websetup/preflight.py'
+        - 'installation/websetup/index.html'
+        - 'test/websetup/test_launch.py'
+        - 'test/websetup/test_bundle.py'
+        - 'test/websetup/test_preflight.py'
+        - 'resources/default-settings/nginx.bootstrap-loopback.conf'
         - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
         - 'test/contracts/fixtures/v1.json'
@@ -35,7 +55,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 16
 
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +76,10 @@ jobs:
       - name: Test deterministic web bundle producer and verifier
         timeout-minutes: 2
         run: python -m unittest discover -s test/web_bundle -p test_web_bundle.py -v
+
+      - name: Test web setup and bundle intake
+        timeout-minutes: 3
+        run: python -m unittest discover -s test/websetup -p 'test_*.py' -v
 
       - name: Test Python V1 contracts
         run: python -m unittest discover -s test/contracts -p test_v1.py -v
@@ -129,6 +153,20 @@ jobs:
             --repository "$WEB_BUNDLE_REPOSITORY" \
             --commit "$WEB_BUNDLE_COMMIT"
 
+      - name: Test verified bundle through local bootstrap nginx and Chromium
+        timeout-minutes: 3
+        env:
+          WEB_BUNDLE_REPOSITORY: ${{ github.repository }}
+          WEB_BUNDLE_COMMIT: ${{ steps.web-bundle-identity.outputs.commit }}
+        run: >-
+          python -u test/websetup/test_launch.py --integration
+          --archive "${{ runner.temp }}/web-bundle-upload/webapp-build.tar.gz"
+          --manifest "${{ runner.temp }}/web-bundle-upload/manifest.json"
+          --repository "$WEB_BUNDLE_REPOSITORY"
+          --commit "$WEB_BUNDLE_COMMIT"
+          --nginx-binary "${{ runner.temp }}/nginx-package/extracted/usr/sbin/nginx"
+          --output-dir "${{ runner.temp }}/bootstrap-web"
+
       - name: Upload verified web bundle
         id: upload-web-bundle
         uses: actions/upload-artifact@v4
@@ -167,5 +205,6 @@ jobs:
             ${{ runner.temp }}/design-preview-react/
             ${{ runner.temp }}/design-preview-library/
             ${{ runner.temp }}/design-preview-nginx-library/
+            ${{ runner.temp }}/bootstrap-web/
           if-no-files-found: ignore
           retention-days: 7
