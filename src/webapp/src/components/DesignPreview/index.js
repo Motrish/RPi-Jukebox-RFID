@@ -25,10 +25,10 @@ import './styles.css';
 const ROUTES = [
   { path: '/start', label: 'Start', icon: '⌂' },
   { path: '/music', label: 'Musik', icon: '♫' },
-  { path: '/library', label: 'Bibliothek', icon: '▤' },
   { path: '/spotify', label: 'Spotify', icon: '●', spotify: true },
   { path: '/playlists', label: 'Playlists', icon: '▤' },
   { path: '/rfid', label: 'RFID', icon: '▧' },
+  { path: '/library', label: 'Bibliothek', icon: '▤' },
   { path: '/energy', label: 'Akku & PiSugar', icon: '◒' },
   { path: '/settings', label: 'Einstellungen', icon: '⚙' },
 ];
@@ -271,7 +271,7 @@ function PreviewShell() {
           </nav>
           <p className="nav-label nav-label-spaced">Gerät</p>
           <nav className="primary-nav" aria-label="Gerät">
-            {ROUTES.slice(5).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
+            {ROUTES.slice(6).map((route) => <NavigationLink key={route.path} route={route} onNavigate={closeMenu} />)}
           </nav>
           <div className="sidebar-note"><span className="status-dot" aria-hidden="true" /><span>Lokale Vorschau</span></div>
         </aside>

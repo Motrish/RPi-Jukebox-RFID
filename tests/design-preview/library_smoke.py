@@ -349,6 +349,43 @@ def run_real_catalog_check(context, servers, output, emit_png, report, expected_
         require(page.get_by_text("same.mp3", exact=True).count() == second_same,
                 "second-page duplicate titles did not match their catalog IDs")
         require(first_same + second_same == 2, "both same-named catalog files were not rendered")
+        long_id = path_ids["\u9577\u3044\u540d\u524d/" + "\u00e9" * 90 + ".mp3"]
+        long_item = next(item for item in second if item["libraryId"] == long_id)
+        long_row = page.locator(".library-row").filter(has=page.get_by_text(long_id, exact=True))
+        require(long_row.count() == 1, "long-title catalog row is missing or ambiguous")
+        require(long_row.get_by_text(long_item["displayName"], exact=True).count() == 1,
+                "long title was truncated in the real catalog response")
+        for width in (1024, 768, 390, 320):
+            page.set_viewport_size({"width": width, "height": 960})
+            metrics = long_row.evaluate("""row => {
+                const copy = row && row.querySelector('.library-row-copy');
+                const title = row && row.querySelector('.library-title-text');
+                const id = row && row.querySelector('.library-id');
+                return {
+                    width: row.ownerDocument.documentElement.clientWidth,
+                    scroll: row.ownerDocument.documentElement.scrollWidth,
+                    copyClient: copy ? copy.clientWidth : 0,
+                    titleClient: title ? title.clientWidth : 0,
+                    titleScroll: title ? title.scrollWidth : 0,
+                    idClient: id ? id.clientWidth : 0,
+                    idScroll: id ? id.scrollWidth : 0,
+                };
+            }""")
+            require(metrics["scroll"] <= metrics["width"],
+                    f"long title caused horizontal overflow at {width}px")
+            require(metrics["titleClient"] > 0 and metrics["titleScroll"] <= metrics["titleClient"],
+                    f"long title is clipped or overflows its row at {width}px")
+            require(metrics["idClient"] > 0 and metrics["idScroll"] <= metrics["idClient"],
+                    f"long-title ID is clipped or overflows its row at {width}px")
+            if width == 390:
+                shot = output / "library-long-title-390.png"
+                page.screenshot(path=str(shot), full_page=True)
+                report["screenshots"].append(str(shot))
+                if emit_png:
+                    encoded = base64.b64encode(shot.read_bytes()).decode("ascii")
+                    require(len(encoded) <= 1_400_000, "mobile review PNG exceeds log limit")
+                    print(f"U03A2_LIBRARY_MOBILE_PNG_BASE64_BEGIN {encoded}", flush=True)
+        report["checks"].append("real page-two long title and ID fit at 1024/768/390/320px")
         page.get_by_role("button", name=re.compile("zurück", re.I)).click()
         verify_catalog_page(page, first)
         report["checks"].append(

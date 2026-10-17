@@ -49,6 +49,7 @@ test('does not request before code submission and renders duplicate titles by op
   expect(screen.getByText('Fehlt')).toBeInTheDocument();
   expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
   expect(document.querySelector('img')).toBeNull();
+  expect(screen.getByRole('heading', { name: 'Bibliothek' })).toHaveFocus();
   expect(fetchLibraryPage).toHaveBeenCalledWith(CODE, undefined, expect.any(AbortSignal));
 });
 
@@ -57,7 +58,8 @@ test('shows an honest empty state and pages without a total count', async () => 
     item('lib_1', 'Titel.mp3'),
   ], 'lib_1')).mockResolvedValueOnce(page([item('lib_2', 'Weiter.mp3')]));
   openLibrary();
-  expect(await screen.findByText(/keine titel/i)).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: /keine titel/i })).toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: 'Titel im Musikkatalog' })).not.toBeInTheDocument();
   expect(screen.getByText(/seite 1/i)).toBeInTheDocument();
   expect(screen.queryByText(/von \d+/i)).not.toBeInTheDocument();
 
@@ -79,6 +81,7 @@ test('401 clears the code and catalog and returns to the code form', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(/zugangscode.*abgelaufen|erneut/i);
   expect(screen.queryByText('Privater Titel.mp3')).not.toBeInTheDocument();
   expect(screen.getByLabelText(/zugangscode/i)).toHaveValue('');
+  expect(screen.getByLabelText(/zugangscode/i)).toHaveFocus();
   expect(screen.queryByText('unsafe raw response')).not.toBeInTheDocument();
 });
 
@@ -89,6 +92,29 @@ test('forgetting access removes the code and current catalog', async () => {
   fireEvent.click(screen.getByRole('button', { name: /zugang vergessen/i }));
   expect(screen.queryByText('Vertraulicher Titel.mp3')).not.toBeInTheDocument();
   expect(screen.getByLabelText(/zugangscode/i)).toHaveValue('');
+  expect(screen.getByLabelText(/zugangscode/i)).toHaveFocus();
+});
+
+test('refresh and paging do not move focus from the activated controls', async () => {
+  fetchLibraryPage.mockResolvedValueOnce(page([item('lib_a', 'Erster Titel.mp3')], 'lib_a'))
+    .mockResolvedValueOnce(page([item('lib_a', 'Aktualisierter Titel.mp3')], 'lib_a'))
+    .mockResolvedValueOnce(page([item('lib_b', 'Zweiter Titel.mp3')]));
+  render(<LibraryPage />);
+  fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+  fireEvent.click(screen.getByRole('button', { name: /bibliothek \u00f6ffnen/i }));
+  expect(await screen.findByText('Erster Titel.mp3')).toBeInTheDocument();
+
+  const refresh = screen.getByRole('button', { name: /aktualisieren/i });
+  refresh.focus();
+  fireEvent.click(refresh);
+  expect(await screen.findByText('Aktualisierter Titel.mp3')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /aktualisieren/i })).toHaveFocus();
+
+  const next = screen.getByRole('button', { name: /weiter/i });
+  next.focus();
+  fireEvent.click(next);
+  expect(await screen.findByText('Zweiter Titel.mp3')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /weiter/i })).toHaveFocus();
 });
 
 test('a late earlier response cannot replace the latest page', async () => {
@@ -98,7 +124,13 @@ test('a late earlier response cannot replace the latest page', async () => {
   render(<LibraryPage />);
   fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
   fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
-  fireEvent.click(screen.getByRole('button', { name: /aktualisieren/i }));
+  expect(fetchLibraryPage).toHaveBeenCalledTimes(1);
+  const firstSignal = fetchLibraryPage.mock.calls[0][2];
+  const refresh = screen.getByRole('button', { name: /aktualisieren/i });
+  expect(refresh).toBeEnabled();
+  fireEvent.click(refresh);
+  expect(fetchLibraryPage).toHaveBeenCalledTimes(2);
+  expect(firstSignal.aborted).toBe(true);
   await act(async () => second.resolve(page([item('lib_new', 'Neuer Stand.mp3')])));
   expect(await screen.findByText('Neuer Stand.mp3')).toBeInTheDocument();
   await act(async () => first.resolve(page([item('lib_old', 'Alter Stand.mp3')])));
@@ -126,6 +158,29 @@ test('an old request cannot restore data after forgetting and opening a new code
   await act(async () => oldRequest.resolve(page([item('lib_old', 'Alte Freigabe.mp3')])));
   expect(screen.queryByText('Alte Freigabe.mp3')).not.toBeInTheDocument();
   expect(screen.getByText('Neu freigegeben.mp3')).toBeInTheDocument();
+});
+
+test('a late unauthorized response cannot clear a newer access session', async () => {
+  const oldRequest = deferred();
+  const newRequest = deferred();
+  fetchLibraryPage.mockResolvedValueOnce(page([item('lib_first', 'Initial title.mp3')]))
+    .mockReturnValueOnce(oldRequest.promise)
+    .mockReturnValueOnce(newRequest.promise);
+  render(<LibraryPage />);
+  fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+  fireEvent.click(screen.getByRole('button', { name: /bibliothek \u00f6ffnen/i }));
+  expect(await screen.findByText('Initial title.mp3')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /aktualisieren/i }));
+  fireEvent.click(screen.getByRole('button', { name: /zugang vergessen/i }));
+  fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
+  fireEvent.click(screen.getByRole('button', { name: /bibliothek \u00f6ffnen/i }));
+  await act(async () => newRequest.resolve(page([item('lib_new', 'New session title.mp3')])));
+  expect(await screen.findByText('New session title.mp3')).toBeInTheDocument();
+  await act(async () => {
+    oldRequest.reject(Object.assign(new Error('stale unauthorized response'), { code: 'UNAUTHORIZED' }));
+  });
+  expect(screen.getByText('New session title.mp3')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/zugangscode/i)).not.toBeInTheDocument();
 });
 
 test('unmount aborts the pending request and removes the secret-bearing view', async () => {
@@ -212,6 +267,42 @@ test('the real client accepts UNKNOWN availability as a valid row', async () => 
   try {
     await expect(realFetchLibraryPage(CODE, undefined, new AbortController().signal))
       .resolves.toEqual(page([item('lib_unknown', 'Noch nicht geprüft.mp3', 'UNKNOWN')]));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('the real client enforces the catalog UTF-8 name boundary without trimming valid names', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn();
+  const validNames = [' '.repeat(3), `${'é'.repeat(127)}a`];
+  const invalidNames = [
+    'é'.repeat(128),
+    'before\u001fafter',
+    'before\u007fafter',
+    '\ud800',
+  ];
+  try {
+    for (const displayName of validNames) {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => page([item('lib_name', displayName)]),
+      });
+      await expect(realFetchLibraryPage(CODE, undefined, new AbortController().signal))
+        .resolves.toEqual(page([item('lib_name', displayName)]));
+    }
+    for (const displayName of invalidNames) {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => page([item('lib_name', displayName)]),
+      });
+      const failure = await realFetchLibraryPage(CODE, undefined, new AbortController().signal)
+        .catch((error) => error);
+      expect(failure.code).toBe('INVALID_RESPONSE');
+      expect(failure.message).not.toContain(displayName);
+    }
   } finally {
     global.fetch = originalFetch;
   }

@@ -47,6 +47,16 @@ export default function LibraryPage() {
   const generation = useRef(0);
   const activeRequest = useRef(null);
   const mounted = useRef(false);
+  const headingRef = useRef(null);
+  const codeInputRef = useRef(null);
+  const focusCodeInput = useRef(false);
+
+  useEffect(() => {
+    if (!authorizedCode && focusCodeInput.current && codeInputRef.current) {
+      codeInputRef.current.focus();
+      focusCodeInput.current = false;
+    }
+  }, [authorizedCode]);
 
   function abortActiveRequest() {
     const request = activeRequest.current;
@@ -66,6 +76,7 @@ export default function LibraryPage() {
     setPageIndex(0);
     setLoading(false);
     setErrorMessage(message);
+    focusCodeInput.current = true;
   }
 
   useEffect(() => {
@@ -131,6 +142,7 @@ export default function LibraryPage() {
     setAuthorizedCode(code);
     setCode('');
     requestPage(code, undefined, 0, [undefined]);
+    headingRef.current?.focus();
   }
 
   function refresh() {
@@ -151,13 +163,14 @@ export default function LibraryPage() {
       <div className="library-heading">
         <div>
           <p className="eyebrow section-eyebrow">EURE DATEIEN</p>
-          <h1 id="library-title">Bibliothek</h1>
+          <h1 id="library-title" ref={headingRef} tabIndex={-1}>Bibliothek</h1>
         </div>
-        {authorizedCode && (
+        {authorizedCode && <div className="library-heading-actions">
+          <button className="text-button library-refresh" type="button" onClick={refresh}>Aktualisieren</button>
           <button className="button-secondary library-forget" type="button" onClick={() => forgetAccess()}>
             Zugang vergessen
           </button>
-        )}
+        </div>}
       </div>
       <p className="library-intro">Durchsuche den vorhandenen Musikkatalog. Es werden keine Dateien verändert.</p>
 
@@ -168,6 +181,7 @@ export default function LibraryPage() {
           <div className="library-access-row">
             <input
               id="library-access-code"
+              ref={codeInputRef}
               aria-describedby="library-access-help"
               type="password"
               autoComplete="off"
@@ -187,7 +201,6 @@ export default function LibraryPage() {
           <span className="empty-icon" aria-hidden="true">♫</span>
           <h2>Keine Titel im Katalog</h2>
           <p>Im vorhandenen Musikkatalog sind derzeit keine Titel eingetragen.</p>
-          <button className="button-secondary" type="button" onClick={refresh}>Aktualisieren</button>
         </div>
       )}
 
@@ -195,7 +208,6 @@ export default function LibraryPage() {
         <>
           <div className="library-list-heading">
             <p>Einträge aus dem Musikkatalog</p>
-            <button className="text-button" type="button" onClick={refresh} disabled={loading}>Aktualisieren</button>
           </div>
           <ul className="library-list" aria-label="Titel im Musikkatalog">
             {page.items.map((item) => (
@@ -209,36 +221,16 @@ export default function LibraryPage() {
               </li>
             ))}
           </ul>
-          <nav className="library-pagination" aria-label="Katalogseiten">
-            <button
-              className="button-secondary"
-              type="button"
-              disabled={!hasPrevious || loading}
-              onClick={() => goToPage(pageIndex - 1, cursorHistory[pageIndex - 1], cursorHistory.slice(0, pageIndex))}
-            >Zurück</button>
-            <span>Seite {pageIndex + 1}</span>
-            <button
-              className="button-secondary"
-              type="button"
-              disabled={!hasNext || loading}
-              onClick={() => goToPage(pageIndex + 1, page.nextCursor, [...cursorHistory.slice(0, pageIndex + 1), page.nextCursor])}
-            >Weiter</button>
-          </nav>
         </>
       )}
-      {authorizedCode && page.items.length === 0 && !loading && !errorMessage && (
-        <div className="library-pagination library-pagination-empty">
-          <button className="button-secondary" type="button" disabled>Zurück</button>
+      {authorizedCode && (
+        <nav className="library-pagination" aria-label="Katalogseiten">
+          <button className="button-secondary" type="button" disabled={!hasPrevious || loading}
+            onClick={() => goToPage(pageIndex - 1, cursorHistory[pageIndex - 1], cursorHistory.slice(0, pageIndex))}>Zurück</button>
           <span>Seite {pageIndex + 1}</span>
-          <button className="button-secondary" type="button" disabled>Weiter</button>
-        </div>
-      )}
-      {authorizedCode && loading && (
-        <div className="library-pagination" aria-label="Katalogseiten">
-          <button className="button-secondary" type="button" disabled>Zurück</button>
-          <span>Seite {pageIndex + 1}</span>
-          <button className="button-secondary" type="button" disabled>Weiter</button>
-        </div>
+          <button className="button-secondary" type="button" disabled={!hasNext || loading}
+            onClick={() => goToPage(pageIndex + 1, page.nextCursor, [...cursorHistory.slice(0, pageIndex + 1), page.nextCursor])}>Weiter</button>
+        </nav>
       )}
       {!authorizedCode && errorMessage && (
         <div className="library-error-actions">

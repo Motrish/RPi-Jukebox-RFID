@@ -30,6 +30,31 @@ function isCode(value) {
     && !UNSAFE_TOKEN_CHARACTER.test(value);
 }
 
+function isValidDisplayName(value) {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  let byteLength = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit < 32 || codeUnit === 127) return false;
+    if (codeUnit <= 0x7f) {
+      byteLength += 1;
+    } else if (codeUnit <= 0x7ff) {
+      byteLength += 2;
+    } else if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      byteLength += 4;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    } else {
+      byteLength += 3;
+    }
+    if (byteLength > 255) return false;
+  }
+  return true;
+}
+
 function validatePage(value) {
   if (!hasOnlyKeys(value, ['items', 'nextCursor'])
     || !Array.isArray(value.items)
@@ -42,8 +67,7 @@ function validatePage(value) {
   value.items.forEach((item) => {
     if (!hasOnlyKeys(item, ['libraryId', 'displayName', 'availability'])
       || !isToken(item.libraryId)
-      || typeof item.displayName !== 'string'
-      || item.displayName.trim().length === 0
+      || !isValidDisplayName(item.displayName)
       || !['AVAILABLE', 'MISSING', 'UNKNOWN'].includes(item.availability)
       || seen.has(item.libraryId)) {
       throw libraryError('INVALID_RESPONSE', 'Die Bibliotheksantwort ist ungültig.');

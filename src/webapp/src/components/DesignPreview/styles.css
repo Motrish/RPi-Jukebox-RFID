@@ -217,7 +217,8 @@
 .design-preview .library-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .design-preview .library-heading h1 { margin: 0; font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; }
 .design-preview .library-heading .section-eyebrow { margin-bottom: 4px; }
-.design-preview .library-forget { flex: none; }
+.design-preview .library-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.design-preview .library-forget, .design-preview .library-refresh { flex: none; white-space: nowrap; }
 .design-preview .library-intro { margin: 9px 0 22px; color: #aaa4b7; font-size: 12px; }
 .design-preview .library-access { max-width: 620px; padding: 19px; border: 1px solid rgb(255 255 255 / 8%); border-radius: 9px; background: linear-gradient(115deg, #292842, #25243a); }
 .design-preview .library-access > label { color: #f4eff8; font-size: 12px; font-weight: 650; }
@@ -393,6 +394,7 @@
   .design-preview .page-footer { flex-direction: column; gap: 3px; }
   .design-preview .library-page { margin-top: 24px; }
   .design-preview .library-heading { align-items: flex-start; }
+  .design-preview .library-heading-actions { flex-direction: column; align-items: flex-end; gap: 6px; }
   .design-preview .library-access { padding: 14px; }
   .design-preview .library-access-row { align-items: stretch; flex-direction: column; }
   .design-preview .library-primary-button { min-height: 39px; }
