@@ -1,0 +1,50 @@
+name: Stop one stalled preview run
+
+on:
+  push:
+    branches:
+      - maintenance/stop-preview-run-39018216900
+    paths:
+      - .github/workflows/stop-stalled-preview.yml
+
+permissions: {}
+
+jobs:
+  stop-stalled-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Verify and stop the specific stale run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repo='Motrish/RPi-Jukebox-RFID'
+          run_id='39018216900'
+          expected_sha='c30b0bfdefa76eb41ce0966d8e4aefcee44f0160'
+          expected_branch='future3/feature-react-preview'
+          endpoint="repos/${repo}/actions/runs/${run_id}"
+
+          metadata="$(gh api "$endpoint")"
+          jq -e --arg sha "$expected_sha" --arg branch "$expected_branch" \
+            '.head_sha == $sha and .head_branch == $branch and (.status | type == "string")' \
+            <<<"$metadata" >/dev/null
+
+          status="$(jq -r '.status' <<<"$metadata")"
+          case "$status" in
+            queued|in_progress)
+              gh api --method POST "${endpoint}/cancel" >/dev/null
+              printf 'Requested cancellation for verified run %s (status: %s).\n' "$run_id" "$status"
+              ;;
+            completed)
+              printf 'Run %s is already terminal; skipping cancellation.\n' "$run_id"
+              ;;
+            *)
+              printf 'Run %s has unexpected status; refusing cancellation.\n' "$run_id" >&2
+              exit 1
+              ;;
+          esac
