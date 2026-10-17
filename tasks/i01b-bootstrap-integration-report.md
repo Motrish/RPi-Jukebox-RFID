@@ -27,14 +27,14 @@ Alle fünf Remoteinhalte wurden bytegleich zum Luna-Stage gelesen. Bestehende I0
 | Nachweis | Ergebnis |
 | --- | --- |
 | [Web39078642625](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078642625), Job117530908018 | completed/success |
-| Linux-Setup/Intake |61 von 61 Fällen erfolgreich, keine Plattformskips |
-| R01a/Verträge |15 Bundlefälle, 22 Pythonverträge, 12 Webverträge erfolgreich |
+| Linux-Setup/Intake | 61 von 61 Fällen erfolgreich, keine Plattformskips |
+| R01a/Verträge | 15 Bundlefälle, 22 Pythonverträge, 12 Webverträge erfolgreich |
 | React/Bibliothek | Bestehender CRA-Build,24 Bibliotheks-Jestfälle, Preview-/Katalog-/nginx-Chromiumprüfungen erfolgreich |
 | Neuer Bootstrap | Tatsächliches frisches CI-Bundle durch Shell/Launcher und nginx 1.24.0: HTTPmatrix, geladene I01a-Fakten, Reactassets, keine Fremdrequests, SIGINT/SIGTERM, unerwarteter nginx-Ausfall, aktive fremdeHTTP200-Portkollision, Sonderpfade und eigene Bereinigung erfolgreich |
-| [Python39078642618](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078642618) |3.9–3.13 und finish117531583697 vollständig completed/success |
-| [Python39078645963](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078645963) |3.9–3.13 und finish117531492489 vollständig completed/success |
-| Gelesener Python3.9-Job117530908192 |262 Tests bestanden; eine vorhandene runpy-Warnung aus unverändertem library_api-CLI-Test |
-| Root lokal |61Setupfälle insgesamt,5 Windows-Skips, Exit0; V3lint Exit0 |
+| [Python39078642618](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078642618) | 3.9–3.13 und finish117531583697 vollständig completed/success |
+| [Python39078645963](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078645963) | 3.9–3.13 und finish117531492489 vollständig completed/success |
+| Gelesener Python3.9-Job117530908192 | 262 Tests bestanden; eine vorhandene runpy-Warnung aus unverändertem library_api-CLI-Test |
+| Root lokal | 61Setupfälle insgesamt,5 Windows-Skips, Exit0; V3lint Exit0 |
 
 Das Source-CI-Artefakt12118400475 gehört ausschließlich zu5150de984e523cd23d26230e064dfb9d45eb3d2d. Das innere Webarchiv ist1370736Bytes groß, SHA256dc82205b56e1269b9b5ee17be5d1e6f5384a368c495f9f69a5394f185fe5e652. Upload, Download genau derselben Artefakt-ID in ein frisches Verzeichnis und erneute Identitäts-/Digestprüfung wurden tatsächlich ausgeführt. Gleiche Buildbytes machen Manifestidentitäten nicht austauschbar. Auch der [Merge-Weblauf39078909520](https://github.com/Motrish/RPi-Jukebox-RFID/actions/runs/39078909520), Job117531676291, ist tatsächlich vollständig completed/success. Er erzeugte das eigene zu741085f902c88aaa2fa74ef5dcd473ba993427e3 passende Manifest und prüfte erneut den echten Bootstrap-/Browserpfad vor Upload. Artefakt12117814330 enthält das1370736Bytes große Archiv mit derselben obigen SHA256; ZIPgröße1371589Bytes. Upload und Download genau dieser Artefakt-ID mit erneuter Prüfung des Mergecommits sind bestätigt. Ablauf24.10.2026um23:26:43UTC. Artefakte benötigen GitHub-Lesezugriff und laufen ab; es wurde kein öffentlicher Release veröffentlicht.
 
@@ -57,3 +57,7 @@ Das abschließende [Ownershipreview](i01b-bootstrap-ownership-review.md) gibt be
 Nächster fachlicher Auftrag sind I02s persistente serialisierte Setupjobs mit commandId, festem Schrittkatalog, Privilegiengrenze und Recovery. I05/X behandelt echten LAN-/HTTPS-/Einmalzugang gesondert. I03 Audio/RFID, SpotifyARMv6, PiSugar-Liveintegration, öffentliche Bundlebereitstellung und Geräteabnahme bleiben offen. Für dieses gerätefreie Ergebnis waren keine neuen Nutzerdaten erforderlich.
 
 Bestätigtes Ziel bleibt ZeroW ARMv6, Raspbian13 trixie32Bit13.6, HiFiBerryMiniAmp und PiSugar2 mit2LEDs. Es gab keinen Gerätezugriff, Paket-/Dienst-/Firewall-/Defaultsiteeingriff oder Konto-/LAN-/TLS-/Releasevorgang. Separate SD erst vor Gerätetests klären. Es ist kein Timer/Scheduler eingerichtet und keine automatische Hintergrundfortsetzung behauptet.
+
+## Zusätzliche Mergeabnahme
+
+Auch die automatische Pythonmatrix am Merge741085f902c88aaa2fa74ef5dcd473ba993427e3 ist tatsächlich vollständig grün: Lauf39078909498 mit allen Versionen3.9–3.13 und finish117532248738 completed/success. Der separat gestartete unveränderte ARMv7-Installer39078909556 ist kein Bootstrap- oder Zero-W-Gerätenachweis. Der Dokumentationspass korrigierte ausschließlich zwei unformatierte Beispiel-URLs und Tabellenabstände; Produktcode blieb unverändert.
