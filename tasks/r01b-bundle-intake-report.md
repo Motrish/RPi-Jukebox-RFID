@@ -12,7 +12,7 @@ Local evidence: `python -m py_compile test_bundle.py` passed. V3 flake8 passed w
 
 Review focus: confirm the `MAX_TAR_STREAM_BYTES` test seam matches the implementation constant; verify the complete Linux run shows `ModuleNotFoundError` at the unconditional product import; review TAR fixture validity and behavior against the approved bounded-PAX contract. No source implementation, workflow, dependency, status, or Git changes were made.
 
-py_compile left a local 	est/websetup/__pycache__/test_bundle.cpython-312.pyc staging artifact. Removal was blocked by the sandbox's auto-rejected approval policy; it is not a publishable source path and should be excluded from integration.
+Generated Python cache (`test/websetup/__pycache__/test_bundle.cpython-312.pyc`) is local staging output. Optional cleanup was rejected by sandbox policy; only the two approved source paths were published.
 
 ## Tatsächlicher Phase1-RED und Testkorrekturauftrag
 
@@ -45,3 +45,7 @@ Beide aktuellen Vollcheckout-Pythonläufe39058605235 und39058602622 am Sourcehea
 Root bestätigt vor Merge: Produktbasisfc995afb, develop42d5023e37dbf8de6477fef5ebcd6eae3cb5087d unverändert; Sourcecommitbaum3dd4b2240cca9ebf729050a919cd3207074fd5b2; PRdiff exakt2neue Pfade, keine pyc/Abhängigkeiten/Workflows. Nach abgeschlossenen Review-/CIbedingungen PR19ready gesetzt und mit erwartetem Sourcehead gemergt. Integration2002cc2c2de3daa8f0b2b06e6f9513cd71c92886 hat exakt Elternfc995afb.../617d2fd1... und denselben geprüften Baum3dd4b2240cca9ebf729050a919cd3207074fd5b2. Produktref und unverändertes develop remote zurückgelesen. R01b als begrenzter lokaler Intake-/Extraktionsslice verified/integrated; vollständigesR01/Installer/Setup/LAN/Gerät bleiben offen.
 
 Automatisch nach Integration gestarteter Pythonlauf39058968526 und unveränderter ARMv7-Installer39058968556 sind bei diesem Nachtrag noch kein zusätzlicher Passnachweis. Vorherige Installerläufe liegen außerhalb des2Pfad-Intakes. Die bestehenden Webassets wurden nicht verändert, daher kein neuer Weblauf für2002cc2c durch die engen Pfadfilter; das vorhandene R01a-Artefakt bleibt ausschließlich anfc995afbgebunden. I01b-dev muss über seinen eigenen tatsächlichen Webworkflow ein zum dann aktuellen Checkout passendes Bundle erzeugen. Keine Umdeklarierung alter Manifestcommits und kein anonymer Releaseendpunkt.
+
+## Tatsächlicher Integrationsnachweis
+
+Auch der automatisch gestartete Pythonlauf39058968526 am Integrationscommit2002cc2c2de3daa8f0b2b06e6f9513cd71c92886 ist inzwischen tatsächlich vollständig completed/success:3.9–3.13 undfinish117473390031. Somit Source- und Integrationscheckout beide abgenommen. Keine ergänzende Installer-/Gerätebehauptung. Der Dokumentationslauf9a5bca42 scheiterte ausschließlich an einem Tabzeichen in der alten Cacheprosa; dieses wird als reine Markdownkorrektur entfernt.
