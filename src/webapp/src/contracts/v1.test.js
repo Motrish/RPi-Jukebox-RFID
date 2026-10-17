@@ -413,6 +413,15 @@ describe('transport-free V1 JavaScript contract writer', () => {
     expect(() => validatePlaylistSnapshot(missingValue)).toThrow(ContractValidationError);
   });
 
+  test('normalizes accepted negative zero to canonical positive zero', () => {
+    const input = { ...clone(FIXTURES.valid_playlist), revision: -0 };
+    const output = validatePlaylistSnapshot(input);
+
+    expect(Object.is(input.revision, -0)).toBe(true);
+    expect(Object.is(output.revision, -0)).toBe(false);
+    expect(output.revision).toBe(0);
+  });
+
   test('documents raw number lexeme loss and keeps out-of-domain versions explicit', () => {
     const rawCases = FIXTURES.js_conformance.domain.rawNumberCases;
     const pythonCases = rawCases.map((item) => {
@@ -461,6 +470,29 @@ describe('transport-free V1 JavaScript contract writer', () => {
     canonicalResults.forEach((result, index) => {
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(canonicalCases[index].expectedValue);
+    });
+  });
+
+  test('rejects sparse arrays at every contract list boundary', () => {
+    const sparse = () => Array(1);
+    const unsupportedVersion = {
+      ...errorFor('UNSUPPORTED_VERSION'),
+      details: { supportedVersions: sparse() },
+    };
+    const revisionConflict = {
+      ...errorFor('REVISION_CONFLICT'),
+      details: { conflicts: sparse() },
+    };
+    const sparseCases = [
+      { validator: validatePlaylistSnapshot, input: { ...clone(FIXTURES.valid_playlist), entries: sparse() } },
+      { validator: validateQueueSnapshot, input: { ...clone(FIXTURES.valid_empty_queue), entries: sparse() } },
+      { validator: validateCommand, input: command('PLAYLIST_CREATE', { name: 'Sparse', items: sparse() }) },
+      { validator: validateError, input: unsupportedVersion },
+      { validator: validateError, input: revisionConflict },
+    ];
+
+    sparseCases.forEach(({ validator, input }) => {
+      expect(() => validator(input)).toThrow(ContractValidationError);
     });
   });
 

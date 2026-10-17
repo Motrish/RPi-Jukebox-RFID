@@ -118,7 +118,7 @@ function integer(value, field) {
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_INTEGER) {
     fail(field, 'invalid_integer');
   }
-  return value;
+  return value === 0 ? 0 : value;
 }
 
 function version(value) {
@@ -165,6 +165,18 @@ function safeText(value, field) {
 function enumValue(value, field, allowed) {
   if (typeof value !== 'string' || !allowed.has(value)) {
     fail(field, 'invalid_enum');
+  }
+  return value;
+}
+
+function denseArray(value, field) {
+  if (!Array.isArray(value)) {
+    fail(field, 'invalid_type');
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.prototype.hasOwnProperty.call(value, index)) {
+      fail(`${field}[${index}]`, 'missing_item');
+    }
   }
   return value;
 }
@@ -225,9 +237,7 @@ function validateQueueEntry(value, expectedPosition = null, field = 'entry') {
 }
 
 function entryList(value, isQueue, field) {
-  if (!Array.isArray(value)) {
-    fail(field, 'invalid_type');
-  }
+  denseArray(value, field);
   if (value.length > MAX_ENTRIES) {
     fail(field, 'limit_exceeded', 'LIMIT_EXCEEDED', { field, limit: MAX_ENTRIES });
   }
@@ -294,9 +304,7 @@ function validateQueueSnapshot(value) {
 }
 
 function commandItems(value, field) {
-  if (!Array.isArray(value)) {
-    fail(field, 'invalid_type');
-  }
+  denseArray(value, field);
   if (value.length > MAX_ENTRIES) {
     fail(field, 'limit_exceeded', 'LIMIT_EXCEEDED', { field, limit: MAX_ENTRIES });
   }
@@ -358,8 +366,8 @@ function validateErrorDetails(code, value) {
     };
   }
   if (code === 'UNSUPPORTED_VERSION') {
-    const versions = required(input, 'supportedVersions', 'details');
-    if (!Array.isArray(versions) || versions.length === 0
+    const versions = denseArray(required(input, 'supportedVersions', 'details'), 'details.supportedVersions');
+    if (versions.length === 0
         || versions.some((item) => !Number.isSafeInteger(item) || item < 1)) {
       fail('details.supportedVersions', 'invalid_versions');
     }
@@ -375,8 +383,8 @@ function validateErrorDetails(code, value) {
     return { commandId: token(required(input, 'commandId', 'details'), 'details.commandId') };
   }
   if (code === 'REVISION_CONFLICT') {
-    const conflicts = required(input, 'conflicts', 'details');
-    if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    const conflicts = denseArray(required(input, 'conflicts', 'details'), 'details.conflicts');
+    if (conflicts.length === 0) {
       fail('details.conflicts', 'invalid_conflicts');
     }
     return {
