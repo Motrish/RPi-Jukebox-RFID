@@ -535,6 +535,10 @@ def run_browser(servers, output, emit_png, expected_items, path_ids):
         context = None
         try:
             context = browser.new_context(viewport={"width": 1440, "height": 960})
+            context.add_init_script(
+                "Object.defineProperty(navigator, 'language', {get: () => 'de'});"
+                "Object.defineProperty(navigator, 'languages', {get: () => ['de', 'en']});"
+            )
             install_network_guards(context, servers, blocked, sockets)
             context.on("page", lambda page: watch_page(page, page_errors, protocol_errors))
             verify_no_secret_persistence_source()
