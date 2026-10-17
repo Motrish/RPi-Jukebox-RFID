@@ -12,7 +12,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | F02 | Vollständige V3-Basis im Fork | implemented | feature/foundation = 4fa84fd50750fd4b52984d51aa7c95466cf5b241; Remotehistorie geprüft, lokaler Nachweis offen |
 | F03 | Baseline, Schnittstelleninventur und Build | in_progress | V3-Webbuild/Python und Bookworm-ARMv7-Installer erfolgreich; alte Bullseye-404 dokumentiert, Matrixkorrektur integriert; ARMv6-Gerätenachweis offen |
 | F04 | Zielgerät und Testressourcen festhalten | in_progress | Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs) bestätigt; OS-Release/Audio/Test-SD offen |
-| F05 | Designreferenz verfügbar machen | blocked | Abruf erneut fehlgeschlagen; tasks/f05-design-report.md |
+| F05 | Designreferenz verfügbar machen | verified | Nutzerbild reference/template.webp am 17.10.2026 sichtbar; u01-design-spec.md |
 | A01 | Verbindliche Prosa-Verträge | in_progress | CONTRACT 1 für Daten-/Store-Slice durch Root reviewed; Gesamtanschluss offen |
 | A02 | Verträge technisch verankern | in_progress | A02a verified/integrated bei 9f5f400 (PR 3), 22 lokale Tests/Lint und volle Pythonmatrix bestanden; A02b/Anschluss offen |
 | P01 | Lokalen Anbieter kapseln | in_progress | P01a1 verified als transportfreier Slice: 82d9547 reviewed, 25 Tests/Lint und volle CI erfolgreich, PR 9 als 1995a5c integriert; reale Session/Resolver/Hardware offen |
@@ -27,8 +27,8 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | S02 | Web-API-OAuth | planned | Noch keine Produktumsetzung |
 | S03 | Katalog, Linkvalidierung und seitenweiser Import | planned | Noch keine Produktumsetzung |
 | S04 | Ablauf und erneute Anmeldung | planned | Noch keine Produktumsetzung |
-| U01 | Visuelles Konzept anhand der Vorlage | planned | Noch keine Produktumsetzung |
-| U02 | Shell, Theme und Navigation | planned | Noch keine Produktumsetzung |
+| U01 | Visuelles Konzept anhand der Vorlage | verified | Tatsächliches Nutzerbild und Entwurf von Root sowie unabhängigem Reviewer anhand echter Screenshots verglichen; u01-design-spec.md |
+| U02 | Shell, Theme und Navigation | in_progress | U02a verified/integrated als afe41e5 (PR10): Review, Browser, Webbuild und Pythonmatrix grün; U02b1/b2 für Reactvorschau läuft bei Luna |
 | U03 | Lokale Bibliothek anzeigen | planned | Noch keine Produktumsetzung |
 | U04 | Upload und Indexierung | planned | Noch keine Produktumsetzung |
 | U05 | Liveplayer, Warteschlange und Playlists | planned | Noch keine Produktumsetzung |
@@ -46,7 +46,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 | M01 | Lesende V2-Inventur und Vorschau | planned | Noch keine Produktumsetzung |
 | M02 | Import mit Sicherung und Rückweg | planned | Noch keine Produktumsetzung |
 | Q01 | Unabhängige Regressionen | in_progress | Zwei zusätzliche Storeproben reviewed, CI 38963718947 erfolgreich, PR 7 als caa8ca9 integriert; Gesamt-Q01 offen |
-| Q02 | Browser und Referenzabnahme | planned | Noch keine Produktumsetzung |
+| Q02 | Browser und Referenzabnahme | in_progress | U02a mit echten Chromiumprüfungen und Referenzvergleich bestätigt; React-/Liveansichten offen |
 | Q03 | Exklusive Hardwareabnahme | planned | Noch keine Produktumsetzung |
 | R01 | Updatepfad und passende Artefakte | planned | Noch keine Produktumsetzung |
 | R02 | Gesamt-Review und Releasevorbereitung | planned | Noch keine Produktumsetzung |
@@ -57,7 +57,7 @@ Statusfolge: planned → ready → in_progress → implemented → reviewed → 
 - V3-Objekte sind erreichbar; feature/foundation und future3/modern-ui bestehen. develop bleibt unverändert.
 - Connector-Schreibweg einschließlich Workflowdatei bestätigt; CI-Korrektur 83b0c01 nach Review und Bookworm-Runnererfolg als b2be3f3 integriert.
 - Zero W ARMv6, Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs) bestätigt; exaktes OS-Abbild/Release, Audio/Reader, Test-SD und Spotify-Zugang offen.
-- Referenzgrafik bislang nicht abrufbar; F05 offen.
+- Referenzgrafik seit 17.10.2026 als Nutzerkopie reference/template.webp sichtbar; F05 verified, U01 beschrieben.
 
 ## Ressourcenregister
 
@@ -168,3 +168,25 @@ Folgecommit 82d9547f5c4431e77ef9312f1ca5fbc1e5fe54d6 unabhängig reviewed. Push-
 P01a1 ist ausschließlich für den transportfreien Adaptervertrag verified; Gesamt-P01 bleibt in_progress wegen realer Session, LibraryResolver, vorhandener MPD-Integration und Zielgeräteprüfung. 25 lokale Adaptertests ergänzen 60 Core-/Store- und 20 PiSugarprüfungen. Die volle CI enthält einen echten kompletten Checkout, kein ARMv6-Audiogerät. Es laufen keine Worker.
 
 Nächster Schritt: reale Session-/Bibliotheksbindung und ARMv6-Spotify-Probe spezifizieren, erst nach den jeweiligen Voraussetzungen anschließen. Anfrage zu OS-Release und Audioanschluss ist offen; Test-SD und vollständiger Entwicklungscheckout fehlen weiter. Designgrafik bleibt nicht abrufbar. Kein Timer und keine automatische Wiederaufnahme eingerichtet.
+
+### Nutzerreferenz am 17.10.2026
+
+reference/template.webp wurde tatsächlich im Gespräch gesehen. F05 ist erfüllt; frühere CDN-Sperre ist historisch. U01 leitet die dunkle/violette Oberfläche, große Cover und feste Playerleiste ab. Root gibt U02a als klar gekennzeichnete Designvorschau unter public/design-preview frei; drei Frontenddateien plus ein Luna-Browsertest, keine Produkt-/Geräteanbindung. Standard bleibt Koordinator plus ein Worker. GPU-/Geräte-/Accountaktionen sind nicht erforderlich.
+
+### U02a-Veröffentlichung
+
+Root-Browserprüfung des eingefrorenen Stands am 17.10.2026 mit Exit 0; 320/390/768/1440 px, Navigation/Menü/Tastatur/Suche/Player/Queue/PiSugar geprüft. Finalscreenshots1440/390 tatsächlich angesehen; V3-Flake8 und JS-Syntax separat Exit 0. Der vorherige fehlgeschlagene Helper-Serverlauf wird nicht als Produktpass gewertet.
+
+Draft-PR 10 enthält aef2356b6bca4eb792bc8e2b00fd332e1d96cc81 (Tree bd85046ab7ec22c246ee0dfb779deec0ed9419e6). Alle vier Luna-Artefakte zurückgelesen, Gesamtbasis unverändert erhalten. Genau ein Worker: unabhängiges Sol-Review; vollständigen Webbuild liest Root am Checkpoint. Keine React-/Backend-/Geräteintegration. Lokaler Vorschau-Server auf Loopback 8872 läuft für Prüfung und Ansicht.
+
+U02a-Review am aef2356: vier Blobs und Browser-PASS unabhängig bestätigt, tatsächliche Referenz und vier Root-Screenshots angesehen. Zwei funktionale P2 zu veralteter nächster Queue und wirkungslosem Home-Brandlink sperren Integration. Vorhandener Webbuild 39015530498 ist grün, deckt diese Interaktionen nicht ab. Ein Luna-Worker korrigiert im selben vier-Dateien-Scope mit Regressionen; Review folgt erneut seriell.
+
+U02a-Folgecommit 7820c608b7fb23df4a768c826d363b08abb4c96f behebt Brand-Rückkehr und Queuekonsistenz mit echten RED/Grün-Regressionen. Root-Browser-Smoke, V3lint und JS-Syntax erneut erfolgreich; vier Remoteinhalte identisch zum Stage. Ein Sol-Worker prüft den genauen Folgecommit; Integration wartet auf Review und neue vollständige CI.
+
+### U02a integriert, U02b gestartet
+
+PR10 bei geprüftem 7820c608b7fb23df4a768c826d363b08abb4c96f nach unabhängigem Folgereview gemerged: afe41e50d016f6d0a3334b1cc4cdf64692582c36, Tree aa144756480c4cbf94f864ed4b6063eccf995788 exakt erhalten. Webbuild39015928794 und Python3.9–3.13 samt finish in39015928795/39015932043 erfolgreich. U02a ist nur für die statische Designvorschau verified; Gesamt-U02 bleibt in_progress.
+
+Root hat U02b1 (vier Reactquelldateien) und U02b2 (zwei QA-/CI-Dateien) seriell auf dieser Basis freigegeben. Ein Luna-Worker, eigener Stage u02-react. Previewboot muss vor Import der verbindenden Legacy-Socketmodule erfolgen. Vollständige CI-Browserprüfung mit blockierten Backend-/WebSocketpfaden und echten Screenshots ist vorgeschrieben. Kein zweiter Reactroot, iframe oder Geräteschreiber. Aufgaben-/Schreibgrenzen in u02b-react-seam-plan.md.
+
+Lesender Nachcheck der vorhandenen anderen lokalen Arbeitskopie löst F01 nicht: V3-Releaseobjekt fehlt und eigene ungesicherte Änderungen sind vorhanden; nichts geändert. Lokale V3-Worktrees, Ziel-OS-Release/Audio/Test-SD und echte Geräteabnahme bleiben offen.

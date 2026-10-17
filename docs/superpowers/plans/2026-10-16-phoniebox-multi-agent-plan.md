@@ -59,7 +59,7 @@ Für vollständige Runtimeintegration erforderlich:
 
 Fortsetzungsentscheidung am 16.10.2026: Transportfreie Verträge und Speicherung dürfen vor vollständigem G0 in isolierten GitHub-Branches entwickelt werden. Grundlage bleibt der vollständige, unveränderte V3-Dateibaum. Jeder Autor erhält einen eigenen lokalen Artefaktordner; dieser gilt ausdrücklich nicht als Repository-Checkout. Gezielte lokale Modulprüfungen und die vollständigen GitHub-Actions-Checkouts werden getrennt dokumentiert. Nur ein Owner schreibt je Datei. Runtimeintegration und Gerätefreigaben bleiben an ihre bisherigen Gates gebunden. Diese begrenzte Arbeitsweise nutzt den bestätigten Remote-Schreibweg, ohne den offenen lokalen Checkout als erledigt zu markieren.
 
-Bestätigte Zielhardware: ursprünglicher Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs). Soloist besitzt keinen passenden ARMv6-Build und ist für diese Box ausgeschlossen; S01/P05 werden auf eine belegte Alternative angepasst. OS-Release, Reader, Tasten, Audioausgang, Bestandsinstallation, Spotify-Zugang und sichtbare Dribbble-Grafik bleiben offen. Maßgeblich ist das [Hardwareprofil](../../../tasks/f04-hardware-profile.md). Ohne Hardware sind Dokumentation, Verträge und Mocks möglich; Geräteabnahme bleibt offen. Ohne Grafik keine Behauptung einer vorlagengetreuen Gestaltung.
+Bestätigte Zielhardware: ursprünglicher Zero W (ARMv6), Raspberry Pi OS Lite 32 Bit, PiSugar 2 (2 LEDs). Soloist besitzt keinen passenden ARMv6-Build und ist für diese Box ausgeschlossen; S01/P05 werden auf eine belegte Alternative angepasst. OS-Release, Reader, Tasten, Audioausgang, Bestandsinstallation, Spotify-Zugang bleiben offen. Die Dribbble-Nutzerkopie ist am 17.10.2026 sichtbar, U01 ist in tasks/u01-design-spec.md beschrieben. Maßgeblich ist das [Hardwareprofil](../../../tasks/f04-hardware-profile.md). Ohne Hardware sind Dokumentation, Verträge und Mocks möglich; Geräteabnahme bleibt offen. Ohne Grafik keine Behauptung einer vorlagengetreuen Gestaltung.
 
 ## 4. Schreibzuständigkeiten und Isolation
 
@@ -179,3 +179,7 @@ Tokens, Keys, echte Musik und gerätespezifische Secrets weder in Briefings noch
 Zuerst F01–F05: Arbeitsumgebung, V3-Basis, Baseline, Geräteinventur, sichtbare Referenz. Danach A01/A02-Verträge, S01/P01/P02-Machbarkeit sowie U01-Design. Produktimplementierung erst nach den zugehörigen Startbedingungen, ohne auf eine künstliche globale Freigabe aller unabhängigen Teile zu warten.
 
 Alle detaillierten Tickets, Modelle und Szenarien stehen im [Backlog](multi-agent/backlog.md).
+
+## Sichtbare Referenz und U02a
+
+Am 17.10.2026 hat der Nutzer die Vorlage direkt bereitgestellt. F05 ist erfüllt. Der geprüfte U01-Entwurf steht in [u01-design-spec.md](../../../tasks/u01-design-spec.md). U02a darf eine isolierte statische Designvorschau unter src/webapp/public/design-preview mit Beispieldaten und echter Browserprüfung liefern. Das ist ausdrücklich kein React-/Router-/Backendanschluss und kein Abschluss des Gesamt-U02. Diese Begrenzung ermöglicht visuelle Abnahme vor fehlenden Runtimevoraussetzungen; die bestehende App bleibt erhalten. Alle vier ausführbaren Projektdateien einschließlich Browsertest schreibt Luna, Root führt Prosa und mechanische Veröffentlichung. Ressourcenmodus bleibt C plus ein Worker.

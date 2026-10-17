@@ -36,3 +36,9 @@ Der geprüfte transportfreie Daten-/Speicherkern liegt auf [future3/modern-ui](h
 
 - [P01a1-Review einschließlich Folgecommit](../../../tasks/p01-local-provider-review.md)
 - [P01-Stopgate-Regressionen](../../../tasks/p01-stop-gate-report.md)
+
+- [U01-Design anhand der sichtbaren Nutzerreferenz](../../../tasks/u01-design-spec.md)
+
+- [U02a-Designvorschau und Browsernachweise](../../../tasks/u02-preview-report.md) und [Review](../../../tasks/u02-preview-review.md)
+
+- [U02b-React-Anschluss und Freigabegrenzen](../../../tasks/u02b-react-seam-plan.md)

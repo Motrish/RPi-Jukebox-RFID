@@ -8,7 +8,7 @@ Ein echter Fork von MiczFlor/RPi-Jukebox-RFID erhält eine neue Weboberfläche, 
 
 Ziel ist der ursprüngliche Raspberry Pi Zero W (ARMv6) mit Raspberry Pi OS Lite 32 Bit und PiSugar 2 (2 LEDs). OS-Release, Audioausgang, Bestandsversion und separate Test-SD bleiben offen. Neuinstallation und Import erst nach Sicherung auf einer geeigneten Testressource; ein Bookworm-ARMv7-Container ist kein ARMv6-Gerätenachweis. Siehe [Hardwareprofil](../../../tasks/f04-hardware-profile.md).
 
-Öffentliche Quellen wurden über Web gelesen. Lokales Klonen scheiterte am eingeschränkten Netzwerk; die lokale GitHub-Anmeldung ist ungültig. Genaue Code-Einhängepunkte sind am ausgewählten Release zu prüfen. Die Designgrafik war ebenfalls nicht abrufbar.
+Öffentliche Quellen wurden über Web gelesen. Lokales Klonen scheiterte am eingeschränkten Netzwerk; die lokale GitHub-Anmeldung ist ungültig. Genaue Code-Einhängepunkte sind am ausgewählten Release zu prüfen. Der frühere CDN-Abruf der Designgrafik scheiterte; am 17.10.2026 liegt die tatsächlich gesehene Nutzerkopie vor.
 
 ## Belegte Grundlagen
 
@@ -52,7 +52,7 @@ Interne Prozesse dürfen Ports oder Unix-Sockets behalten. Im Browser gibt es ei
 
 ## Oberfläche
 
-Verbindliche gestalterische Referenz ist die [Dribbble-Grafik](https://cdn.dribbble.com/userupload/5037629/file/original-c7e28b3f83c5daa85bc0ada2bfdc4578.png). Sie ließ sich hier nicht abrufen. Farben, Schriften und Proportionen sind deshalb noch nicht analysiert. Folgende Struktur ist ein funktionaler Vorschlag, keine Beschreibung des Bildes.
+Verbindliche gestalterische Referenz ist die [Dribbble-Grafik](https://cdn.dribbble.com/userupload/5037629/file/original-c7e28b3f83c5daa85bc0ada2bfdc4578.png). Die Nutzerkopie reference/template.webp ist seit 17.10.2026 tatsächlich sichtbar. [U01-Design](../../../tasks/u01-design-spec.md) beschreibt den Bildbezug, dunkle/violette Flächen, Coverreihen, Playerleiste und mobile Ableitung. Die folgenden Menüpunkte passen diese Referenz an Phoniebox an.
 
 | Menüpunkt | Inhalt |
 | --- | --- |
@@ -68,7 +68,7 @@ Desktop: Navigation seitlich, Suche/Akku oben, Bibliothek/Cover zentral, optiona
 
 Kennzeichnendes Bedienelement ist die gemeinsame Liste mit verständlicher Quellenkennzeichnung. Überall dieselben Aktionen: jetzt spielen, als Nächstes, anhängen, zur Playlist hinzufügen. Nicht unterstützte Funktionen werden gezielt deaktiviert und erklärt.
 
-Nach Sichtung der Vorlage Design-Tokens für 4–6 Grundfarben, Schriftrollen, Abstände und Rundungen ableiten. Zuerst Startseite, Playlist und Mobilansicht abstimmen. UI-Ressourcen lokal ausliefern, damit eigene Musik offline bedienbar bleibt. Tastatur, Fokus, Kontrast und Touch-Ziele gehören zur Abnahme.
+U01 legt aus der sichtbaren Vorlage sechs Grundfarben, Schriftrollen, Abstände und Rundungen fest; Luna setzt die technischen Tokens in U02 um. Zuerst Startseite, Playlist und Mobilansicht abstimmen. UI-Ressourcen lokal ausliefern, damit eigene Musik offline bedienbar bleibt. Tastatur, Fokus, Kontrast und Touch-Ziele gehören zur Abnahme.
 
 ## Spotify und gemischte Listen
 

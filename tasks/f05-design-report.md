@@ -1,6 +1,6 @@
 # F05 / U01 – Designreferenz und visuelles Konzept
 
-Stand: 16.10.2026
+Stand des ursprünglichen Abrufberichts: 16.10.2026. Aktualisierung 17.10.2026: Nutzerkopie sichtbar, F05 erfüllt; die folgenden Abrufbefunde sind historisch.
 
 ## Ergebnis
 
@@ -27,3 +27,7 @@ Das sind Konzeptvorgaben beziehungsweise Funktionsannahmen, keine Beobachtungen 
 ## Voraussetzung zum Fortsetzen
 
 Eine lokal bereitgestellte Kopie der Originalgrafik wird benötigt. Nach Erhalt muss sie tatsächlich geöffnet und geprüft werden; anschließend können Referenzmerkmale für Startseite, Playlist und Smartphoneansicht beschrieben werden. Das Bild darf als Recherchebeleg im Referenzordner liegen, wird aber nicht als redistribuierbares UI-Asset übernommen.
+
+## Nutzerkopie am 17.10.2026
+
+Der Nutzer hat reference/template.webp im Gespräch bereitgestellt. Root hat das tatsächliche Bild gesehen: dunkle Muzes-Musikansicht mit linker Seitennavigation, violettem Playlist-Hero, Coverreihen und durchgehender Playerleiste unten. SHA-256 der lokalen Referenz: 23072BBA7F71AC62D1063379D1E6E716BE4ED093D0FF5C37FC9E8EB3D3A4DDEC. Der CDN-Zugriff bleibt ungeklärt, wird aber nicht mehr für die Designanalyse benötigt. F05 ist erfüllt; der konkrete U01-Entwurf steht in u01-design-spec.md. Künstlerfotos und Referenzbitmap werden nicht als Produktassets übernommen.

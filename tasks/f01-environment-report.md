@@ -57,3 +57,7 @@ Status-Update für den Koordinator: bei der letzten GET-Abfrage liefen der unver
 ## Aktuelle Arbeitsentscheidung nach Limitreset
 
 Die vorstehenden frühen Aussagen zu ungeprüften Workflowrechten und noch nicht startbaren Produktmodulen sind historische Zwischenstände. Workflow-Schreiben ist inzwischen mit Commit 83b0c01 und Dateireadback bestätigt. Die Koordination hat eng begrenzte transportfreie Modulentwicklung auf isolierten Remote-Branches freigegeben; vollständige CI-Checkouts und lokale Modulprüfungen bleiben getrennte Nachweise. F01 und G0 bleiben hinsichtlich lokaler Worktrees offen. Maßgeblich ist tasks/todo.md.
+
+## Lesender Nachcheck am 17.10.2026
+
+Eine vorhandene andere lokale Phoniebox-Arbeitskopie wurde ausschließlich lesend geprüft. Sie enthält nur einen Filebrowser-Arbeitsbranch, hat eigene ungesicherte Änderungen und besitzt das benötigte V3-Releaseobjekt 4fa84fd50750fd4b52984d51aa7c95466cf5b241 nicht. Sie wurde nicht verändert und ist kein Ersatz für einen vollständigen V3-Entwicklungscheckout. F01/G0 bleiben für lokale V3-Worktrees offen. Der U02a-Stage bleibt ausdrücklich eine isolierte vier-Dateien-Vorschau mit Browsernachweis und vollständigem Webbuild in GitHub Actions.

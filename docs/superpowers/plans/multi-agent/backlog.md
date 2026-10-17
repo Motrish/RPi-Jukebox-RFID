@@ -186,7 +186,7 @@ Startseite, Playlist und Smartphone strukturieren; Farbe/Typografie/Abstände/Zu
 
 **Owner:** U / Luna high. **Vorgänger:** A02, U01. **Bereich:** AppShell/Theme/PlayerBar; Routeranschluss durch X.
 
-Referenzkonzept technisch umsetzen, lokale Ressourcen, responsive Navigation und durchgängige Playerfläche. Vorläufige datengesteuerte Fixtures sind ausdrücklich simuliert.
+Referenzkonzept technisch umsetzen, lokale Ressourcen, responsive Navigation und durchgängige Playerfläche. Vorläufige datengesteuerte Fixtures sind ausdrücklich simuliert. U02a startet nach sichtbarer Nutzerreferenz mit isolierter statischer Designvorschau unter public/design-preview und eigenem Browser-Smoke; keine Runtimeanbindung. Der spätere U02b-Schritt überführt die abgenommenen Elemente in React/AppShell und bestehenden Router. Gesamt-U02 bleibt bis dahin offen.
 
 **Abnahme/Prüfung:** Screenshots 390/768/1440 px, Fokus/Tastatur, lange Titel und Seitenwechsel; kein horizontales Pflichtscrollen.
 
