@@ -2,16 +2,23 @@ import React, { Suspense } from 'react';
 
 import Grid from '@mui/material/Grid';
 
-import AppSettingsProvider from './context/appsettings';
-import PubSubProvider from './context/pubsub';
-import PlayerProvider from './context/player';
-import Router from './router';
+const DesignPreview = React.lazy(() => import('./components/DesignPreview'));
+const LegacyPubSubProvider = React.lazy(() => import('./context/pubsub'));
+const LegacyPlayerProvider = React.lazy(() => import('./context/player'));
+const LegacyAppSettingsProvider = React.lazy(() => import('./context/appsettings'));
+const LegacyRouter = React.lazy(() => import('./router'));
 
-function App() {
+function isDesignPreviewBoot() {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.hash.slice(1).split(/[?#]/, 1)[0];
+  return path === '/design-preview' || path.startsWith('/design-preview/');
+}
+
+function LegacyApp() {
   return (
-    <PubSubProvider>
-      <PlayerProvider>
-        <AppSettingsProvider>
+    <LegacyPubSubProvider>
+      <LegacyPlayerProvider>
+        <LegacyAppSettingsProvider>
           <Grid
             alignItems="center"
             container
@@ -19,19 +26,20 @@ function App() {
             id="routes"
             justifyContent="center"
           >
-            <Router />
+            <LegacyRouter />
           </Grid>
-        </AppSettingsProvider>
-      </PlayerProvider>
-    </PubSubProvider>
+        </LegacyAppSettingsProvider>
+      </LegacyPlayerProvider>
+    </LegacyPubSubProvider>
   );
 }
 
-// here app catches the suspense from page in case translations are not yet loaded
-export default function WrappedApp() {
+export default function App() {
+  const [previewBoot] = React.useState(isDesignPreviewBoot);
+
   return (
     <Suspense fallback="Loading ...">
-      <App />
+      {previewBoot ? <DesignPreview /> : <LegacyApp />}
     </Suspense>
   );
 }
