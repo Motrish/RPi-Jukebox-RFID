@@ -47,6 +47,8 @@
   const batteryStatus = document.querySelector("#battery-status");
   const queueButton = document.querySelector(".queue-button");
   const queuePanel = document.querySelector("#queue-panel");
+  const queueItems = document.querySelector("#queue-items");
+  const batterySamplePercent = 82;
   let currentTrack = 0;
   let playing = true;
 
@@ -125,6 +127,7 @@
     const index = uniqueTracks.findIndex((item) => item.title === track.title && item.artist === track.artist);
     if (index >= 0) currentTrack = index;
     paintTrack(track);
+    renderQueue();
     setPlaying(true);
   }
 
@@ -140,7 +143,20 @@
   function moveTrack(direction) {
     currentTrack = (currentTrack + direction + uniqueTracks.length) % uniqueTracks.length;
     paintTrack(uniqueTracks[currentTrack]);
+    renderQueue();
     setPlaying(true);
+  }
+
+  function renderQueue() {
+    const upcoming = [];
+    for (let offset = 1; offset <= 2; offset += 1) {
+      const track = uniqueTracks[(currentTrack + offset) % uniqueTracks.length];
+      const item = document.createElement("span");
+      item.className = "queue-item";
+      item.textContent = `${track.title} · ${track.source}`;
+      upcoming.push(item);
+    }
+    queueItems.replaceChildren(...upcoming);
   }
 
   function closeQueue() {
@@ -153,24 +169,25 @@
     const known = mode === "active";
     batteryStatus.hidden = !enabled;
     if (known) {
-      document.querySelector("#battery-label").textContent = "PiSugar · 82 %";
+      document.querySelector("#battery-label").textContent = `PiSugar · ${batterySamplePercent} %`;
       document.querySelector("#energy-state-title").textContent = "Akku verbunden";
       document.querySelector("#energy-state-description").textContent = "Der Akkustand ist als Beispieldatum verfügbar.";
       document.querySelector("#energy-reading").hidden = false;
-      document.querySelector("#battery-fill").style.height = "72%";
-      document.querySelector(".battery-pill").setAttribute("aria-label", "PiSugar-Akku: 82 Prozent, Energieansicht öffnen");
+      document.querySelector("#battery-fill").style.transform = `scaleY(${batterySamplePercent / 100})`;
+      document.querySelector("#energy-percent").textContent = `${batterySamplePercent}%`;
+      document.querySelector(".battery-pill").setAttribute("aria-label", `PiSugar-Akku: ${batterySamplePercent} Prozent, Energieansicht öffnen`);
     } else if (mode === "unreachable") {
       document.querySelector("#battery-label").textContent = "PiSugar · unbekannt";
       document.querySelector("#energy-state-title").textContent = "Akku nicht erreichbar";
       document.querySelector("#energy-state-description").textContent = "Der aktuelle Akkustand ist nicht verfügbar.";
       document.querySelector("#energy-reading").hidden = true;
-      document.querySelector("#battery-fill").style.height = "0%";
+      document.querySelector("#battery-fill").style.transform = "scaleY(0)";
       document.querySelector(".battery-pill").setAttribute("aria-label", "PiSugar-Akku unbekannt, Energieansicht öffnen");
     } else {
       document.querySelector("#energy-state-title").textContent = "PiSugar deaktiviert";
       document.querySelector("#energy-state-description").textContent = "Für dieses Gerät ist kein PiSugar-Status aktiv.";
       document.querySelector("#energy-reading").hidden = true;
-      document.querySelector("#battery-fill").style.height = "0%";
+      document.querySelector("#battery-fill").style.transform = "scaleY(0)";
     }
   }
 
@@ -189,6 +206,7 @@
     if (action === "play-mix") {
       currentTrack = 0;
       paintTrack(uniqueTracks[currentTrack]);
+      renderQueue();
       setPlaying(true);
     } else if (action === "toggle-play") {
       setPlaying(!playing);
@@ -218,6 +236,7 @@
     button.textContent = liked ? "♥" : "♡";
   });
   queueButton.addEventListener("click", () => {
+    renderQueue();
     const open = queueButton.getAttribute("aria-expanded") !== "true";
     queueButton.setAttribute("aria-expanded", String(open));
     queuePanel.hidden = !open;
@@ -237,5 +256,6 @@
   });
 
   paintTrack(uniqueTracks[0]);
+  renderQueue();
   setBatteryMode("active");
 })();

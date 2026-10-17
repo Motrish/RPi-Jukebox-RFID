@@ -160,7 +160,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .energy-illustration { position: relative; display: grid; width: 130px; height: 130px; flex: none; place-items: center; border-radius: 50%; background: radial-gradient(circle, rgb(164 86 237 / 22%), transparent 70%); }
 .battery-large { position: relative; display: block; width: 52px; height: 89px; border: 3px solid #c2abd5; border-radius: 9px; }
 .battery-large::before { position: absolute; top: -9px; left: 15px; width: 16px; height: 6px; border-radius: 3px 3px 0 0; background: #c2abd5; content: ""; }
-.battery-large span { position: absolute; right: 5px; bottom: 5px; left: 5px; height: 72%; border-radius: 3px; background: linear-gradient(#c77bff, #8a45c8); transition: height .2s ease; }
+.battery-large span { position: absolute; top: 5px; right: 5px; bottom: 5px; left: 5px; border-radius: 3px; background: linear-gradient(#c77bff, #8a45c8); transform: scaleY(0); transform-origin: center bottom; transition: transform .2s ease; }
 .energy-spark { position: absolute; top: 12px; right: 7px; color: #edc987; font-size: 18px; }
 .energy-copy .eyebrow { color: #a896bc; }
 .energy-copy h3 { margin: 6px 0 4px; font-size: 21px; letter-spacing: -.03em; }
@@ -205,6 +205,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .queue-button { font-size: 20px; }
 .queue-panel { position: absolute; right: 22px; bottom: calc(100% + 10px); display: grid; width: 230px; gap: 10px; padding: 15px; border: 1px solid rgb(255 255 255 / 10%); border-radius: 9px; background: #211e35; box-shadow: 0 14px 40px rgb(0 0 0 / 35%); color: #b5afc2; font-size: 10px; }
 .queue-panel strong { color: white; font-size: 12px; }
+.queue-items { display: grid; gap: 10px; }
+.queue-item { color: #b5afc2; font-size: 10px; }
 .sidebar-scrim { display: none; }
 
 @media (max-width: 1150px) {

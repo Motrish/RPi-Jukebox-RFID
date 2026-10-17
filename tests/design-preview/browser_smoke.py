@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
+FAILURES: list[str] = []
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -34,10 +36,11 @@ def parse_args() -> argparse.Namespace:
 
 def require(condition: bool, message: str) -> None:
     if not condition:
-        raise AssertionError(message)
+        FAILURES.append(message)
 
 
 def main() -> int:
+    FAILURES.clear()
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     console_errors: list[str] = []
@@ -86,6 +89,54 @@ def main() -> int:
                 f"{label} should keep the shared music preview visible",
             )
 
+        def return_home_with_keyboard(view: str, shift_tabs: int) -> None:
+            page.locator(f'.nav-item[data-view="{view}"]').click()
+            for _ in range(shift_tabs):
+                page.keyboard.press("Shift+Tab")
+            brand = page.locator(".brand")
+            brand_has_focus = brand.evaluate("element => document.activeElement === element")
+            require(brand_has_focus, f"Brand link was not keyboard-reachable from {view}")
+            page.keyboard.press("Enter")
+            breadcrumb = page.locator("#breadcrumb-current").inner_text()
+            require(breadcrumb == "Start", f"Brand link did not return from {view}")
+            active_view = page.locator('.nav-item[data-view="start"]').get_attribute("aria-current")
+            require(active_view == "page", "Brand link did not activate Start navigation")
+            require(page.locator("#hero-title").is_visible(), "Brand link did not show the Start view")
+            require(page.locator("#placeholder-panel").is_hidden(), "Brand link left a placeholder visible")
+            require(page.locator("#player-title").inner_text() == "Leise Wellen", "Brand link changed the player selection")
+            page.locator('.nav-item[data-view="start"]').click()
+
+        return_home_with_keyboard("rfid", 5)
+        return_home_with_keyboard("settings", 7)
+
+        page.locator('.album-card[data-track="Leise Wellen"]').click()
+        page.locator(".queue-button").click()
+        queued_title = page.locator("#queue-panel span").nth(0).inner_text().split(" · ")[0]
+        require(queued_title == "Kleiner Komet", "Queue after Leise Wellen should start with Kleiner Komet")
+        page.locator('[data-action="next"]').click()
+        require(
+            page.locator("#player-title").inner_text() == queued_title,
+            "Next did not select the title shown first in the queue",
+        )
+        page.locator('[data-action="previous"]').click()
+        require(page.locator("#player-title").inner_text() == "Leise Wellen", "Previous did not restore Leise Wellen")
+        queued_title = page.locator("#queue-panel span").nth(0).inner_text().split(" · ")[0]
+        require(queued_title == "Kleiner Komet", "Queue order after Previous is incorrect")
+        page.locator('[data-action="next"]').click()
+        require(
+            page.locator("#player-title").inner_text() == queued_title,
+            "Next after Previous did not match the visible queue",
+        )
+        page.locator('[data-action="play-mix"]').click()
+        require(page.locator("#player-title").inner_text() == "Morgens im Garten", "Mix start did not select its first track")
+        queued_title = page.locator("#queue-panel span").nth(0).inner_text().split(" · ")[0]
+        require(queued_title == "Leise Wellen", "Queue after mix start should start with Leise Wellen")
+        page.locator('[data-action="next"]').click()
+        require(
+            page.locator("#player-title").inner_text() == queued_title,
+            "Next after mix start did not match the visible queue",
+        )
+
         search = page.locator("#music-search")
         search.fill("keine passende beispieldatei")
         require(page.get_by_role("heading", name="Nichts gefunden").is_visible(), "Empty search state is missing")
@@ -102,6 +153,11 @@ def main() -> int:
         page.locator('.nav-item[data-view="energy"]').click()
         require(page.locator("#energy-state-title").inner_text() == "Akku verbunden", "Known PiSugar state is missing")
         require(page.locator("#battery-status").is_visible(), "Known PiSugar state should show the header indicator")
+        require(page.locator("#energy-percent").inner_text() == "82%", "Known battery percentage is missing")
+        require(
+            page.locator("#battery-fill").evaluate("element => element.style.transform") == "scaleY(0.82)",
+            "Battery fill must use the same sample percentage in its inner fill area",
+        )
         page.locator('input[name="battery-mode"][value="unreachable"]').check()
         require(
             page.locator("#battery-label").inner_text() == "PiSugar · unbekannt",
@@ -162,6 +218,10 @@ def main() -> int:
     require(not console_errors, f"Browser console errors: {console_errors}")
     require(not page_errors, f"Unhandled browser errors: {page_errors}")
     require(not external_requests, f"Unexpected external requests: {external_requests}")
+    if FAILURES:
+        for failure in FAILURES:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        return 1
     print(
         "PASS: navigation, mobile menu/Escape, keyboard search, player/queue, source labels, search reset, PiSugar states, "
         "no overflow, no console errors or external requests"

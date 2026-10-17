@@ -13,7 +13,7 @@
   <a class="skip-link" href="#main">Zum Inhalt springen</a>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Hauptnavigation">
-      <a class="brand" href="#start" aria-label="Phoniebox Start"><span class="brand-mark" aria-hidden="true">♫</span><span>phoniebox</span></a>
+      <a class="brand" href="#start" aria-label="Phoniebox Start" data-view="start"><span class="brand-mark" aria-hidden="true">♫</span><span>phoniebox</span></a>
       <p class="nav-label">Bibliothek</p>
       <nav class="primary-nav" aria-label="Bereiche">
         <button class="nav-item is-active" type="button" data-view="start" aria-current="page"><span class="nav-icon" aria-hidden="true">⌂</span>Start</button>
@@ -51,7 +51,7 @@
 
       <div class="preview-ribbon" role="note"><span class="ribbon-dot" aria-hidden="true"></span>Designvorschau · Beispieldaten</div>
 
-      <section class="hero" aria-labelledby="hero-title">
+      <section class="hero" id="start" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="eyebrow">DEIN MIX AUS ALLEN WELTEN</p>
           <p class="hero-overline">Lieblingsmix</p>
@@ -127,7 +127,7 @@
     <div class="player-progress"><div class="progress-label"><span id="playback-state">Vorschau läuft</span><span>Beispiel · ohne Audio</span></div><div class="progress-track" aria-hidden="true"><span></span></div></div>
     <div class="player-volume"><span aria-hidden="true">◖</span><label class="visually-hidden" for="volume">Vorschau-Lautstärke</label><input id="volume" type="range" min="0" max="100" value="64"><span class="volume-value" id="volume-value">64</span></div>
     <button class="queue-button icon-button" type="button" aria-expanded="false" aria-controls="queue-panel" aria-label="Warteschlange anzeigen">☷</button>
-    <div class="queue-panel" id="queue-panel" hidden><strong>Als Nächstes</strong><span>Leise Wellen · Spotify</span><span>Kleiner Komet · Eigene Musik</span></div>
+    <div class="queue-panel" id="queue-panel" hidden><strong>Als Nächstes</strong><div class="queue-items" id="queue-items"></div></div>
   </footer>
 </body>
 </html>
