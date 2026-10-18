@@ -1,10 +1,10 @@
 """Durable setup-job journal tests; all work stays in temporary databases."""
 
 import json
-import multiprocessing
 from pathlib import Path
 import sqlite3
 import sys
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -26,13 +26,6 @@ SNAPSHOT_FIELDS = {
     "desiredConfigSummary", "appliedSteps", "revision", "createdAt",
     "updatedAt", "nextAction", "error",
 }
-
-
-def _submit_in_process(database, command_id, config, output):
-    try:
-        output.put(("ok", jobs.JobStore(database).submit(command_id, config)))
-    except jobs.JobError as error:
-        output.put(("error", error.code))
 
 
 class JobStoreTests(unittest.TestCase):
@@ -248,21 +241,48 @@ class JobStoreTests(unittest.TestCase):
         self.assertEqual(len({item["revision"] for item in results}), 1)
 
     def test_two_processes_serialize_submission_in_sqlite(self):
-        context = multiprocessing.get_context("spawn")
-        output = context.Queue()
-        processes = [context.Process(
-            target=_submit_in_process,
-            args=(self.database, "process-command", CONFIG, output),
-        ) for _ in range(2)]
-        for process in processes:
-            process.start()
-        results = [output.get(timeout=15) for _ in processes]
-        for process in processes:
-            process.join(timeout=15)
-            self.assertEqual(process.exitcode, 0)
-        self.assertEqual([kind for kind, _value in results], ["ok", "ok"])
-        self.assertEqual(len({value["jobId"] for _kind, value in results}), 1)
-        self.assertEqual(self.store.active()["jobId"], results[0][1]["jobId"])
+        child_code = (
+            "import json, sys; "
+            "sys.path.insert(0, sys.argv[1]); "
+            "from installation.websetup import jobs; "
+            "result = {'kind': 'ok', 'snapshot': jobs.JobStore(sys.argv[2]).submit("
+            "sys.argv[3], json.loads(sys.argv[4]))}; "
+            "sys.stdout.write(json.dumps(result, separators=(',', ':')))"
+        )
+        command = [
+            sys.executable, "-B", "-c", child_code, str(STAGE_ROOT), self.database,
+            "process-command", json.dumps(CONFIG, separators=(",", ":")),
+        ]
+        processes = []
+        results = []
+        try:
+            for _index in range(2):
+                processes.append(subprocess.Popen(
+                    command, cwd=str(STAGE_ROOT), stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ))
+            for process in processes:
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual(process.returncode, 0, stderr)
+                results.append(json.loads(stdout))
+        finally:
+            for process in processes:
+                if process.poll() is None:
+                    process.terminate()
+            for process in processes:
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=5)
+        self.assertEqual([result["kind"] for result in results], ["ok", "ok"])
+        self.assertEqual(len({result["snapshot"]["jobId"] for result in results}), 1)
+        self.assertEqual(self.store.active()["jobId"], results[0]["snapshot"]["jobId"])
 
     def test_different_concurrent_commands_have_one_winner_and_release_loser_id(self):
         barrier = threading.Barrier(2)
