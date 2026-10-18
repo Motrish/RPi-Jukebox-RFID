@@ -19,6 +19,7 @@ Ursprünglich eingefrorene SHA-256: jobs.py 36c792495e95fdd5a62542c6ff2bcc9bbc48
 ## Einschränkungen
 
 Keine HTTP-/Worker-/Privilegeintegration, keine realen Konfigurationswirkungen. Früherer Worker muss vor Recovery unabhängig sicher beendet sein. Vollständiger Checkout und Linuxregressionen folgen erst in CI. Autorbericht war nach fehlerhaftem PowerShell-Here-String zunächst leer; Root erkannte dies durch tatsächliche Längenprüfung und schrieb diesen Bericht aus der nachgereichten Autorennachricht.
+
 ## Endgültige Korrekturen nach Review und CI
 
 Beide P2-Korrekturen von Luna: None als Fehlercode vor Transaktion abweisen; eigene kanonische Schemaobjekte exakt prüfen und fremde Definitionen ohne Mutation ablehnen. Zusätzliche Regressionen: None bewahrt aktiven Slot; falscher Revisionstyp bewahrt Datei; konkurrierende Revision besitzt einen Gewinner. Starker Rollbacktest benutzt AFTER UPDATE/RAISE(FAIL), danach Trigger entfernen und unveränderten Snapshot erneut öffnen. 20 Autorentests plus vier lokale Qwen-Tests.

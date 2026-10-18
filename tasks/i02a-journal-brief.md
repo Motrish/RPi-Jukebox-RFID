@@ -37,6 +37,7 @@ reconcile_interrupted() liefert eine Liste der tatsächlich geänderten Snapshot
 ## Nachweis
 
 Zuerst echte RED-Tests vor jobs.py; dann Implementierung und gezielte Tests für Vertrag, idempotente Parallelaufrufe, zwei Instanzen/Prozesse, aktive Konflikte, Revisionsrennen, Wiederöffnung/Crash, Intent vor Bestätigung, Recovery ohne Wiederholung, Rollback bei SQLite-Fehler und redigierte Fehler. Datenbanken nur temporär. Kein Handshake mit echtem Gerät. V3-Flake8-Konventionen und vorhandene Setup-Regressionsprüfungen weiterverwenden. Am Ende Dateien einfrieren und Hashes melden. Unabhängiges 6.1-sol-Review vor Veröffentlichung; voller CI-Checkout vor Integration.
+
 ## Präzisierungen nach Architekturprüfung
 
 Job-ID verwendet dieselbe ASCII-Tokenregel und Grenze 1 bis 64 wie command_id. Vollständige Snapshots einschließlich appliedSteps müssen innerhalb einer konsistenten Lesetransaktion entstehen. SQLite wartet höchstens fünf Sekunden auf konkurrierende Locks und gibt dann STORE_UNAVAILABLE ohne Rohdetails zurück. Revisionen bleiben im Slice int >= 0; nicht speicherbare Überläufe müssen kontrolliert und ohne Teilmutation fehlschlagen. Kein zusätzlicher JS-Vertrag wird hier behauptet.
