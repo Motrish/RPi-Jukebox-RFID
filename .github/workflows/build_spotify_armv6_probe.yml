@@ -6,162 +6,83 @@ on:
       - codex/s01-armv6-spotify-probe
     paths:
       - .github/workflows/build_spotify_armv6_probe.yml
+      - tools/spotify/armv6-probe-build.sh
+      - docs/spotify-armv6-probe.md
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  cross-image-audit:
-    name: Audit ARMv6 cross toolchain image
+  build-and-probe:
+    name: Build and verify the manual ARMv6 probe
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
-      - name: Resolve and inspect the official cross image
+      - name: Check out the probe sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned librespot source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git clone --filter=blob:none https://github.com/librespot-org/librespot.git "$RUNNER_TEMP/librespot"
+          git -C "$RUNNER_TEMP/librespot" checkout --detach 19959512c212cbc48a3ff64382fe204f52c659a7
+          test "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD)" = 19959512c212cbc48a3ff64382fe204f52c659a7
+          test "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD:Cargo.lock)" = 68fa2e109f03ed820143b005ea5779e6b325c530
+          mkdir -p "$RUNNER_TEMP/s01-artifact"
+          {
+            printf 'upstream_repository=https://github.com/librespot-org/librespot.git\n'
+            printf 'upstream_commit=%s\n' "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD)"
+            printf 'cargo_lock_git_blob=%s\n' "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD:Cargo.lock)"
+            printf 'cargo_lock_sha256=%s\n' "$(sha256sum "$RUNNER_TEMP/librespot/Cargo.lock" | awk '{print $1}')"
+          } > "$RUNNER_TEMP/s01-artifact/upstream-git-provenance.txt"
+
+      - name: Build inside the audited immutable ARMv6 toolchain image
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          image='ghcr.io/cross-rs/arm-unknown-linux-musleabihf'
-          docker pull "${image}:edge"
-
-          image_ref="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${image}:edge" \
-            | awk -F@ -v expected="${image}" '$1 == expected { print; exit }')"
-          if [[ -z "${image_ref}" || "${image_ref}" != "${image}@sha256:"* ]]; then
-            printf 'Could not resolve %s:edge to an immutable RepoDigest\n' "${image}" >&2
+          if ! command -v rustup >/dev/null 2>&1; then
+            printf 'The pinned runner image has no official rustup installation; refusing an alternate installer.\n' >&2
             exit 1
           fi
+          rustup toolchain install 1.90.0 --profile minimal --target arm-unknown-linux-musleabihf
+          rust_bin_dir="$(dirname "$(rustup which --toolchain 1.90.0 rustc)")"
+          rust_dir="$(dirname "${rust_bin_dir}")"
+          test -x "${rust_dir}/bin/cargo"
+          test "$("${rust_dir}/bin/rustc" --version | awk '{print $2}')" = '1.90.0'
+          {
+            printf 'rustup=%s\n' "$(rustup --version)"
+            printf 'toolchain=%s\n' "$("${rust_dir}/bin/rustc" -vV)"
+            printf 'target_installed='; rustup target list --toolchain 1.90.0 --installed
+          } >> "$RUNNER_TEMP/s01-artifact/upstream-git-provenance.txt"
 
-          # Preserve the candidate digest before inspecting the image so it survives
-          # a later diagnostic failure.
-          printf 'Resolved immutable image: %s\n' "${image_ref}"
-          printf 'Resolved immutable image: `%s`\n\n' "${image_ref}" >> "${GITHUB_STEP_SUMMARY}"
-          docker image inspect "${image_ref}" --format \
-            'Image ID={{.Id}} platform={{.Os}}/{{.Architecture}} created={{.Created}} repo-digests={{json .RepoDigests}} labels={{json .Config.Labels}}'
+          image_ref='ghcr.io/cross-rs/arm-unknown-linux-musleabihf@sha256:41abfe511a58facf4d07a23fece3b648062c781baa6a7afc17306f9cb6e6ffca'
+          docker pull "${image_ref}"
+          docker image inspect "${image_ref}" --format 'Image ID={{.Id}} platform={{.Os}}/{{.Architecture}} created={{.Created}} repo-digests={{json .RepoDigests}} labels={{json .Config.Labels}}' \
+            | tee "$RUNNER_TEMP/s01-artifact/container-image.txt"
+          revision="$(docker image inspect "${image_ref}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          test "${revision}" = 526d03ddcd2f70e683074b3ea6f75ed300f33132
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          docker run --rm \
+            --user "${runner_uid}:${runner_gid}" \
+            --entrypoint /bin/bash \
+            --volume "$RUNNER_TEMP/librespot:/src:ro" \
+            --volume "$GITHUB_WORKSPACE:/probe:ro" \
+            --volume "$RUNNER_TEMP/s01-artifact:/out" \
+            --volume "${rust_dir}:/opt/rust:ro" \
+            --workdir /src \
+            "${image_ref}" \
+            -c 'exec /bin/bash /probe/tools/spotify/armv6-probe-build.sh'
 
-          audit_log="$(mktemp)"
-          if ! docker run --rm -i --entrypoint /bin/bash "${image_ref}" -s <<'AUDIT' | tee "${audit_log}"
-          set -Eeuo pipefail
-
-          printf '\n== Image target environment ==\n'
-          printf 'container uname: '
-          uname -a
-          printf 'configured cross variables:\n'
-          env | sort | grep -E '^(CROSS_|CARGO_TARGET_ARM_|CC_arm_|AR_arm_|QEMU_)' || true
-
-          compiler=''
-          for candidate in arm-unknown-linux-musleabihf-gcc arm-linux-musleabihf-gcc; do
-            if command -v "${candidate}" >/dev/null 2>&1; then
-              compiler="$(command -v "${candidate}")"
-              break
-            fi
-          done
-          if [[ -z "${compiler}" ]]; then
-            printf 'No ARM hard-float musl GCC compiler found in the pinned image\n' >&2
-            exit 2
-          fi
-
-          printf '\n== Compiler and sysroot ==\n'
-          printf 'compiler path: %s\n' "${compiler}"
-          "${compiler}" -dumpmachine
-          "${compiler}" -dumpfullversion -dumpversion
-          printf 'sysroot: '
-          sysroot="$("${compiler}" -print-sysroot)"
-          printf '%s\n' "${sysroot}"
-          "${compiler}" -v 2>&1
-          if [[ -n "${sysroot}" && -d "${sysroot}" ]]; then
-            printf 'musl header candidates (first 40):\n'
-            find "${sysroot}" -maxdepth 4 -type f \
-              \( -name features.h -o -name version.h -o -iname '*musl*' \) -print | sed -n '1,40p'
-            if [[ -f "${sysroot}/include/features.h" ]]; then
-              printf 'features.h sha256: '
-              sha256sum "${sysroot}/include/features.h"
-            elif [[ -f "${sysroot}/usr/include/features.h" ]]; then
-              printf 'features.h sha256: '
-              sha256sum "${sysroot}/usr/include/features.h"
-            else
-              printf 'No conventional musl features.h found under reported sysroot\n'
-            fi
-          else
-            printf 'Compiler reported no inspectable sysroot directory\n' >&2
-            exit 3
-          fi
-
-          printf '\n== Compiler ARM ABI macros ==\n'
-          macros="$(printf '' | "${compiler}" -dM -E -x c -)"
-          printf '%s\n' "${macros}" | grep -E '^#define (__ARM_ARCH|__ARM_ARCH_[0-9A-Za-z_]+|__ARM_PCS_VFP|__VFP_FP__|__ARM_FP)'
-          if ! grep -Eq '^#define __ARM_ARCH 6$|^#define __ARM_ARCH_6__ 1$' <<< "${macros}"; then
-            printf 'Compiler predefines do not identify an ARMv6 target\n' >&2
-            exit 4
-          fi
-          if ! grep -q '^#define __ARM_PCS_VFP 1$' <<< "${macros}"; then
-            printf 'Compiler predefines do not identify the VFP hard-float ABI\n' >&2
-            exit 5
-          fi
-
-          printf '\n== Temporary ARM1176 compiler/QEMU smoke check ==\n'
-          cat > /tmp/s01-armv6-audit.c <<'C_SOURCE'
-          #include <stdio.h>
-          int main(void) {
-          #if !defined(__ARM_PCS_VFP) || !defined(__VFP_FP__)
-              return 20;
-          #endif
-          #if !defined(__ARM_ARCH_6__) && (!defined(__ARM_ARCH) || __ARM_ARCH != 6)
-              return 21;
-          #endif
-              puts("S01_ARMV6_HARDFLOAT_SMOKE_OK");
-              return 0;
-          }
-          C_SOURCE
-          "${compiler}" -static -O2 -o /tmp/s01-armv6-audit /tmp/s01-armv6-audit.c
-          file /tmp/s01-armv6-audit
-          readelf -h /tmp/s01-armv6-audit
-          attributes="$(readelf -A /tmp/s01-armv6-audit)"
-          printf '%s\n' "${attributes}" | grep -E 'Tag_CPU_arch:|Tag_FP_arch:|Tag_ABI_VFP_args:' || true
-          program_headers="$(readelf -l /tmp/s01-armv6-audit)"
-          if [[ "${program_headers}" == *INTERP* ]]; then
-            printf 'Audit smoke binary unexpectedly needs a dynamic interpreter\n' >&2
-            exit 6
-          fi
-
-          qemu="$(command -v qemu-arm || true)"
-          if [[ -z "${qemu}" ]]; then
-            printf 'qemu-arm is missing from the pinned image\n' >&2
-            exit 7
-          fi
-          printf '\n== ARM1176 C smoke execution ==\n'
-          printf 'QEMU: %s\n' "${qemu}"
-          "${qemu}" -cpu arm1176 /tmp/s01-armv6-audit | tee /tmp/s01-armv6-audit.out
-          grep -qx 'S01_ARMV6_HARDFLOAT_SMOKE_OK' /tmp/s01-armv6-audit.out
-
-          printf '\n== Target musl loader version under ARM1176 ==\n'
-          loader="${sysroot}/lib/ld-musl-armhf.so.1"
-          if [[ ! -e "${loader}" ]]; then
-            printf 'Expected musl hard-float loader not found: %s\n' "${loader}" >&2
-            exit 8
-          fi
-          set +e
-          libc_banner="$("${qemu}" -cpu arm1176 -L "${sysroot}" "${loader}" --help 2>&1)"
-          libc_status=$?
-          set -e
-          printf '%s\n' "${libc_banner}"
-          if [[ "${libc_status}" -gt 1 ]]; then
-            printf 'Target musl loader returned unexpected status %s\n' "${libc_status}" >&2
-            exit 9
-          fi
-          if ! grep -Eq 'Version [0-9]+\.[0-9]+\.[0-9]+' <<< "${libc_banner}"; then
-            printf 'Target musl loader did not report a recognizable version\n' >&2
-            exit 10
-          fi
-
-          printf 'S01_ARMV6_IMAGE_AUDIT_COMPLETE\n'
-          AUDIT
-          then
-            printf 'Container audit command failed; see the diagnostics above\n' >&2
-            exit 11
-          fi
-
-          if ! grep -Fqx 'S01_ARMV6_IMAGE_AUDIT_COMPLETE' "${audit_log}"; then
-            printf 'Container audit did not reach its completion sentinel\n' >&2
-            exit 12
-          fi
+      - name: Upload the verified probe and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: spotify-armv6-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/s01-artifact/
+          if-no-files-found: error
+          retention-days: 7
