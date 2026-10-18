@@ -16,16 +16,32 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"; 
 export PATH=/opt/rust/bin:$PATH
 export CARGO_HOME=/tmp/s01-cargo-home
 export CARGO_TARGET_DIR=/tmp/s01-target
-for tool in bash sha256sum python3 rustc cargo timeout qemu-arm file readelf arm-unknown-linux-musleabihf-gcc; do need "$tool"; done
+for tool in bash sha256sum apt-get dpkg-query rustc cargo timeout qemu-arm file readelf arm-unknown-linux-musleabihf-gcc; do need "$tool"; done
+
+mkdir -p /out
+readonly out=/out
+if ! command -v python3 >/dev/null 2>&1; then
+  [[ "$(id -u)" == 0 ]] || fail 'python3 is absent and the container is not root; cannot install the required JSON/license helper'
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3
+fi
+need python3
+cat /etc/os-release > "$out/container-os-release.txt"
+{
+  printf 'python_version=%s\n' "$(python3 --version 2>&1)"
+  dpkg-query -W -f='${binary:Package}\t${Version}\n' python3 python3-minimal
+  apt-cache policy python3 python3-minimal
+} > "$out/python-runtime-provenance.txt"
+
 [[ "$(rustc --version | awk '{print $2}')" == "$RUST_VERSION" ]] || fail 'rustc version mismatch'
 [[ "$(rustc -vV | awk -F': ' '$1 == "host" {print $2}')" == x86_64-unknown-linux-gnu ]] || fail 'unexpected rustc host'
 [[ "$(arm-unknown-linux-musleabihf-gcc -dumpmachine)" == "$TARGET" ]] || fail 'unexpected C linker target'
+[[ "$(arm-unknown-linux-musleabihf-gcc -dumpfullversion -dumpversion)" == 14.4.0 ]] || fail 'cross GCC version changed from the audited image'
+[[ "$(arm-unknown-linux-musleabihf-gcc -print-sysroot)" == /x-tools/arm-unknown-linux-musleabihf/arm-unknown-linux-musleabihf/sysroot ]] || fail 'cross GCC sysroot changed from the audited image'
 compiler_macros="$(printf '' | arm-unknown-linux-musleabihf-gcc -dM -E -x c -)"
 grep -Eq '^#define __ARM_ARCH 6$|^#define __ARM_ARCH_6__ 1$' <<< "$compiler_macros" || fail 'C compiler is not targeting ARMv6'
 grep -q '^#define __ARM_PCS_VFP 1$' <<< "$compiler_macros" || fail 'C compiler is not using the VFP hard-float ABI'
 
-mkdir -p /out
-readonly out=/out
 mkdir -p "$CARGO_HOME"
 
 {
@@ -313,3 +329,4 @@ printf 'S01_ARMV6_PROBE_BUILD_COMPLETE\n' >> "$out/provenance.txt"
   cd "$out"
   sha256sum librespot-armv6-musl > binary.sha256
 )
+chmod -R a+rX "$out"

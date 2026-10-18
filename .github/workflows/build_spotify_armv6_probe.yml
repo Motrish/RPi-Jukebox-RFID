@@ -66,10 +66,7 @@ jobs:
             | tee "$RUNNER_TEMP/s01-artifact/container-image.txt"
           revision="$(docker image inspect "${image_ref}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
           test "${revision}" = 526d03ddcd2f70e683074b3ea6f75ed300f33132
-          runner_uid="$(id -u)"
-          runner_gid="$(id -g)"
           docker run --rm \
-            --user "${runner_uid}:${runner_gid}" \
             --entrypoint /bin/bash \
             --volume "$RUNNER_TEMP/librespot:/src:ro" \
             --volume "$GITHUB_WORKSPACE:/probe:ro" \
