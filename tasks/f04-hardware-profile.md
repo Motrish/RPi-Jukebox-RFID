@@ -1,0 +1,11 @@
+# F04 – bestätigtes Zielgerät
+
+Stand: 17.10.2026. Bestätigte Nutzerangaben: ursprünglicher Raspberry Pi Zero W, Raspberry Pi OS Lite 32 Bit und PiSugar 2 mit zwei LEDs. Kein Zero 2 W. Die vom Nutzer eingefügte Ausgabe von /etc/os-release meldet Raspbian GNU/Linux 13 (trixie), VERSION_ID=13, VERSION_CODENAME=trixie und DEBIAN_VERSION_FULL=13.6. Audiogerät ist ein HiFiBerry MiniAmp. Noch kein eigener Gerätezugriff und keine Installation auf der Box erfolgt.
+
+Der ursprüngliche Zero W verwendet ARMv6. Raspbian-basierte 32-Bit-Pakete müssen dafür gebaut sein; die Bezeichnung armhf alleine beweist diese Eignung nicht. Der bisher erfolgreiche Bookworm-ARMv7-Container bestätigt den vorhandenen Installer auf seiner Containerarchitektur, nicht auf dieser Zielbox. [Offizielle Architektureinordnung](https://www.raspberrypi.com/news/raspberry-pi-os-64-bit/), [Zero-Dokumentation](https://www.raspberrypi.com/documentation/computers/zero.html).
+
+Spotify Soloist bietet in der gelesenen Downloadmatrix ARMv7, ARM64 und x86-64, keinen ARMv6-Build. Soloist ist deshalb für dieses Ziel ausgeschlossen, solange kein offizieller passender Build vorliegt. Keine Hardwareaufrüstung unterstellen. Ein alternatives Backend braucht einen eigenen aktuellen Auth-, Build-, Einzeltrack- und Stopnachweis. [Offizielle Soloist-Downloads](https://developer.spotify.com/documentation/soloist/reference/downloads-and-updates).
+
+Noch offen: genaues OS-Abbild, Kernel-/Paketarchitektur und aktive Audio-/ALSA-/MPD-Konfiguration, RFID-Reader und Tasten/GPIO, PiSugar-Manager/Firmware/Socketrechte sowie Bestandsversion. OS-Release und Audiogerätemodell sind beantwortet; diese Angaben belegen noch keinen erfolgreichen Betrieb des neuen Forks auf Trixie oder die aktive Audioanbindung. Der Nutzer klärt eine separate Test-SD erst, sobald sie für Gerätetests gebraucht wird. Sie blockiert die unabhängige Entwicklung nicht. Eine Neuinstallation auf der Bestandskarte ist nicht freigegeben.
+
+Für die spätere Abnahme: ARMv6- und OS-Erkennung vor Paketinstallation, passenden Raspbian-Paketpfad nachweisen, Browserartefakte extern bauen, Laufzeitlast und Speicher am Zero messen. Lokale Musik, PiSugar und optionales Spotify getrennt testen. Erst tatsächliche Hardwaremessung kann das Gerätegate schließen; Unit- und Dockerprüfungen bleiben eigene Nachweisarten.
