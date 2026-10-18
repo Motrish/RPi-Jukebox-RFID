@@ -39,3 +39,9 @@ Neueste Nutzersteuerung: einfache Codingaufgaben lokal, übrige Subagents ohne n
 Erste vollständige CI offenbarte einen pytest-spezifischen Spawnimportfehler im Testharness; keine Wiederholung desselben fehlerhaften Commits. Nach bestätigter Ursache gezielte Testkorrektur, scoped Review und neuer Sourcecommit2045a753. Kein behaupteter Restquotenwert, Resetzeitpunkt oder autonomer Timer.
 
 Abschluss I02a: Source- und Merge-CI einschließlich3.9–3.13 und Web/Chromium/nginx vollständig erfolgreich; PR21 als ec56e0c1 integriert. Alle Autoren und Reviewer beendet; nächster Auftrag I02b. Keine zusätzliche Modellinstallation und kein Scheduler. Neue Quotenregeln bleiben wie oben beschrieben.
+
+## Einsatz für I02b1
+
+Komplexe Worker-/Leaselaufzeit und Prozess-/Crashprüfungen anLuna, drei kleine portable Vertragstests anlokalesQwen2.5-Coder14B, unabhängige Architektur- und Quellreviews an6.1-sol. Root schreibt Prosa und orchestriert exakte Artefakte. Keine weitere Modellinstallation, kein neuer Quoten-/Resetwert. Der Windowslauf105Tests mit19Skips ist ausdrücklich kein Linux-Leasenachweis. Unabhängiges Review fand vor Veröffentlichung zu korrigierende Linux-Fixtures und Fehlergrenzen; gezielte Fixrunde mit separater Nachprüfung und anschließend vollständigem Linux-CI-Checkout. Kein Scheduler eingerichtet.
+
+I02b1 abgeschlossen: PR22/55b472b8, Source- und Merge-Web/Python vollständig bestanden,307Prüfungen. LokaleQwen-Kleinaufträge und gezielteReviewrunden, keine ausführbareSol-Logik. Alle Coding-/Reviewworker beendet. Kein verlässlicher Quotenwert oder eingerichteter Timer. Nächster begrenzter Auftrag: Workerhost und Privilegien-/Prozesslebenszeitgrenze.
