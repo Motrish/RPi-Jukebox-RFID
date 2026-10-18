@@ -168,6 +168,42 @@ class JobStoreTests(unittest.TestCase):
         self.assertEqual(confirmed["status"], "QUEUED")
         self.assertEqual(confirmed["appliedSteps"], [{"stepId": STEPS[0], "diagnostic": "CONFIRMED"}])
 
+    def test_wait_for_inspection_persists_only_current_running_intent(self):
+        queued = self.store.submit("inspect-command", CONFIG)
+        running = self.store.begin_step(queued["jobId"], 0, STEPS[0])
+        waiting = self.store.wait_for_inspection(running["jobId"], running["revision"], STEPS[0])
+        self.assertEqual(waiting["status"], "WAITING_USER")
+        self.assertEqual(waiting["stepId"], STEPS[0])
+        self.assertEqual(waiting["appliedSteps"], [])
+        self.assertEqual(waiting["revision"], running["revision"] + 1)
+        self.assertEqual(waiting["nextAction"], {"kind": "INSPECT_SYSTEM"})
+        self.assertIsNone(waiting["error"])
+        self.assert_error("INVALID_TRANSITION", lambda: self.store.wait_for_inspection(
+            waiting["jobId"], waiting["revision"], STEPS[0]))
+        self.assert_error("REVISION_CONFLICT", lambda: self.store.wait_for_inspection(
+            running["jobId"], running["revision"], STEPS[0]))
+        self.assertEqual(self.store.get(waiting["jobId"]), waiting)
+
+    def test_wait_for_inspection_rejects_wrong_step_invalid_inputs_and_overflow_atomically(self):
+        queued = self.store.submit("inspect-validation-command", CONFIG)
+        running = self.store.begin_step(queued["jobId"], 0, STEPS[0])
+        self.assert_error("INVALID_TRANSITION", lambda: self.store.wait_for_inspection(
+            running["jobId"], running["revision"], STEPS[1]))
+        self.assert_error("INVALID_REQUEST", lambda: self.store.wait_for_inspection(
+            running["jobId"], True, STEPS[0]))
+        self.assertEqual(self.store.get(running["jobId"]), running)
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("UPDATE jobs SET revision = ? WHERE job_id = ?",
+                               ((1 << 63) - 1, running["jobId"]))
+            connection.commit()
+        finally:
+            connection.close()
+        before = self.store.get(running["jobId"])
+        self.assert_error("STORE_UNAVAILABLE", lambda: self.store.wait_for_inspection(
+            before["jobId"], before["revision"], STEPS[0]))
+        self.assertEqual(self.store.get(before["jobId"]), before)
+
     def test_terminal_jobs_survive_reopen_and_active_slot_is_released(self):
         queued = self.store.submit("complete-command", CONFIG)
         complete = self.finish_job(queued)

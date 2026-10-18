@@ -343,6 +343,25 @@ class JobStore:
     def fail_step(self, job_id, expected_revision, step_id, error_code) -> Dict[str, object]:
         return self._transition(job_id, expected_revision, step_id, "fail", error_code)
 
+    def wait_for_inspection(self, job_id, expected_revision, step_id) -> Dict[str, object]:
+        job_id = _validate_job_id(job_id)
+        revision = _validate_revision(expected_revision)
+        step_id = _validate_step_type(step_id)
+        with self._transaction(write=True) as connection:
+            row = self._fetch(connection, job_id)
+            self._check_revision(row, revision)
+            if row["status"] != "RUNNING" or row["step_id"] != step_id:
+                _raise("INVALID_TRANSITION")
+            if row["revision"] >= _MAX_REVISION:
+                _raise("STORE_UNAVAILABLE")
+            connection.execute(
+                "UPDATE jobs SET status = 'WAITING_USER', next_action_json = ?, "
+                "error_json = NULL, revision = revision + 1, updated_at = ? "
+                "WHERE job_id = ? AND status = 'RUNNING'",
+                (_json({"kind": "INSPECT_SYSTEM"}), _timestamp(), job_id),
+            )
+            return self._snapshot(self._fetch(connection, job_id))
+
     def reconcile_interrupted(self) -> List[Dict[str, object]]:
         changed = []
         with self._transaction(write=True) as connection:
