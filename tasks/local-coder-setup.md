@@ -45,3 +45,9 @@ Modellgewichte und rohe Generierungsartefakte werden nicht in GitHub veröffentl
 - [Offizielle Codex-Befehle](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 
 Hardware, Modellinstallation und Antwortstatistiken wurden lokal tatsächlich abgefragt. Externe Dokumentation ist keine Messung der eigenen GPU oder des Codex-Restkontingents.
+
+## Aktualisierte Aufgabenverteilung nach Nutzersteuerung
+
+Neueste Vorgabe18.10.2026 ersetzt die frühere vorsorgliche Sperre von Cloudcodern bei unbekannter Restquote: einfache Aufgaben lokal mitQwen, komplexere Aufgaben dürfen wieder anLuna/Subagents gehen, unabhängige Reviews6.1-sol. Bestätigt höchstens10% Restkontingent bleibt eine lokale Codinggrenze; kein zuverlässig auslesbarer aktueller Wert. Keine Astra- oder Sol-Codingrolle. Ressourcenpolicy und einzige operative Liste tasks/todo.md sind maßgeblich.
+
+Tatsächlicher erster Produktbeitrag: vier kleine unittest-Vertragstests für I02a, nach lokaler Qwen-Generierung, begrenzter Nacharbeit und unabhängigem Review integriert als PR21/ec56e0c1. Der Koordinator normalisierte nur zwei Leerzeilen ohne Änderung der Codetokens. Vollständige Source- und Merge-CI bestanden. Große Erstentwürfe blieben verworfen; generische Probewrapper sind weiterhin nicht freigegeben.
