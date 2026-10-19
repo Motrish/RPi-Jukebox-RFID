@@ -416,38 +416,12 @@ class LocalPlaybackRuntime:
             timer.trigger()
 
     def _acquire_owner_lock(self):
-        uid = os.geteuid()
-        directory = self.lock_directory or "/tmp/phoniebox-playback-%s" % uid
-        directory_fd = None
-        try:
-            directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-            info = os.fstat(directory_fd)
-            if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or stat.S_IMODE(info.st_mode) != 0o700:
-                raise OSError("unsafe owner directory")
-            flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW
-            descriptor = os.open("audio-owner.lock", flags, 0o600, dir_fd=directory_fd)
-            os.close(directory_fd)
-            directory_fd = None
-            file_info = os.fstat(descriptor)
-            if (not stat.S_ISREG(file_info.st_mode) or file_info.st_uid != uid
-                    or stat.S_IMODE(file_info.st_mode) != 0o600):
+        descriptor = _acquire_audio_owner_descriptor(lock_directory=self.lock_directory)
+        with self._lock:
+            if self._owner_fd is not None:
                 os.close(descriptor)
-                raise OSError("unsafe owner file")
-            try:
-                import fcntl
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                os.close(descriptor)
-                raise _OwnerBusy()
-            with self._lock:
-                self._owner_fd = descriptor
-        except _OwnerBusy:
-            raise
-        except Exception:
-            raise _OwnerUnsafe() from None
-        finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
+                raise _OwnerUnsafe()
+            self._owner_fd = descriptor
 
     def _fail_bootstrap(self, code):
         with self._lock:
@@ -522,6 +496,44 @@ class _StopUnconfirmed(Exception):
 
 class _CredentialUnavailable(Exception):
     pass
+
+
+def _acquire_audio_owner_descriptor(*, lock_directory=None):
+    """Return the exclusively locked descriptor for the shared audio owner."""
+    uid = os.geteuid()
+    directory = lock_directory or "/tmp/phoniebox-playback-%s" % uid
+    directory_fd = None
+    descriptor = None
+    try:
+        directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        info = os.fstat(directory_fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or stat.S_IMODE(info.st_mode) != 0o700:
+            raise OSError("unsafe owner directory")
+        flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW
+        descriptor = os.open("audio-owner.lock", flags, 0o600, dir_fd=directory_fd)
+        os.close(directory_fd)
+        directory_fd = None
+        file_info = os.fstat(descriptor)
+        if (not stat.S_ISREG(file_info.st_mode) or file_info.st_uid != uid
+                or stat.S_IMODE(file_info.st_mode) != 0o600):
+            raise OSError("unsafe owner file")
+        try:
+            import fcntl
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise _OwnerBusy()
+        return descriptor
+    except _OwnerBusy:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise
+    except Exception:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise _OwnerUnsafe() from None
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 def _path(value, field):
