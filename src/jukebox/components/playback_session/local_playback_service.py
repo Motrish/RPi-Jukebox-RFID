@@ -138,11 +138,14 @@ class LocalPlaybackService:
     def begin_shutdown(self):
         intent_id = uuid.uuid4().hex
         with self._lock:
+            preserve_retry = (self._retry_stop and self._pending is not None
+                              and self._pending["operation"] == "STOP")
             self._closed = True
             self._gate.invalidate()
-            self._pending = {"intentId": intent_id, "operation": "STOP",
-                             "entryId": None, "mediaRef": None}
-            self._retry_stop = False
+            if not preserve_retry:
+                self._pending = {"intentId": intent_id, "operation": "STOP",
+                                 "entryId": None, "mediaRef": None}
+            self._retry_stop = preserve_retry
             return self._snapshot_locked()
 
     def snapshot(self):

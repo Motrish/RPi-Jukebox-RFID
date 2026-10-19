@@ -26,13 +26,14 @@ class MPDServer:
         self.stop_reading = stop_reading
         self.ack_command = None
         self.no_ack_command = None
+        self.stop_ack_without_stopping = False
         self.invalid_status = False
         self.commands = []
         self.state = "stop"
         self.songid = None
         self.playlistlength = 0
         self.elapsed = 0
-        self.option = {"repeat": 0, "random": 0, "single": 0, "consume": 0}
+        self.option = {"repeat": 0, "random": 0, "single": 0, "consume": 0, "password": 0}
         self.listener = socket.socket()
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind(("127.0.0.1", 0))
@@ -103,10 +104,14 @@ class MPDServer:
             self.elapsed = float(parts[2])
             self._send(conn, b"OK\n")
         elif command == "stop":
-            self.state = "stop"
-            self._send(conn, b"OK\n")
+            self._stop(conn)
         else:
             self._send(conn, b"ACK [5@0] {} unknown command\n")
+
+    def _stop(self, conn):
+        if not self.stop_ack_without_stopping:
+            self.state = "stop"
+        self._send(conn, b"OK\n")
 
     def _serve(self):
         while not self.stopping.is_set():
@@ -260,6 +265,20 @@ class MPDSessionTests(unittest.TestCase):
             self.assertEqual("stop", context.status()["state"])
             self.assertEqual("0007", context.addid("albums/demo/track.mp3"))
         self.assertEqual(["status", 'addid "albums/demo/track.mp3"'], self.server.commands)
+
+    def test_password_uses_the_transaction_deadline_and_shared_session(self):
+        with self.session.transaction(time.monotonic() + 1.0) as context:
+            context.password("12345")
+            self.assertEqual("stop", context.status()["state"])
+        self.assertEqual(['password "12345"', "status"], self.server.commands)
+
+    def test_password_rejection_does_not_send_invalid_secret(self):
+        with self.session.transaction(time.monotonic() + 1.0) as context:
+            with self.assertRaises(ValueError):
+                context.password("")
+            with self.assertRaises(ValueError):
+                context.password(123)
+        self.assertEqual([], self.server.commands)
 
     def test_disconnected_transaction_does_not_reconnect(self):
         self.client.disconnect()

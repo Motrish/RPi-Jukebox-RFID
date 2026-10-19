@@ -148,6 +148,24 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual([call[0] for call in self.provider.calls], ["START", "STOP", "STOP"])
         self.assertEqual(self.service.snapshot()["gate"]["owner"], None)
 
+    def test_shutdown_preserves_authorized_pending_stop_retry(self):
+        self.service.request_start("entry_a", self.ref)
+        self.step()
+        self.provider.fail_next_stop = True
+        self.service.request_stop()
+        failed = self.step()
+        self.assertEqual(failed["lastFailure"], {"operation": "STOP", "code": "STOP_UNCONFIRMED"})
+
+        retry_id = self.service.request_stop()
+        shutdown = self.service.begin_shutdown()
+        self.assertTrue(shutdown["closed"])
+        self.assertEqual(retry_id, shutdown["pending"]["intentId"])
+
+        self.step()
+        self.step()
+        self.assertEqual([call[0] for call in self.provider.calls], ["START", "STOP", "STOP"])
+        self.assertTrue(self.service.snapshot()["quiescent"])
+
     def test_blocked_superseded_start_cannot_consume_latest_intent(self):
         self.provider.start_entered = threading.Event()
         self.provider.start_release = threading.Event()
