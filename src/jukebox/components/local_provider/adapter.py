@@ -530,6 +530,82 @@ def _safe_resolution(value, library_id):
     return True
 
 
+def _parse_mpd_integer(value, field):
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]+", value, re.ASCII) is None:
+        _invalid(field, "invalid_integer")
+    try:
+        return int(value)
+    except (ValueError, OverflowError):
+        _invalid(field, "invalid_integer")
+
+
+def _parse_mpd_option(value, field):
+    if not isinstance(value, str) or value not in {"0", "1"}:
+        _invalid(field, "invalid_option")
+    return int(value)
+
+
+def _parse_mpd_single(value, field):
+    if value == "oneshot":
+        return value
+    return _parse_mpd_option(value, field)
+
+
+def _parse_mpd_time(value, field):
+    if not isinstance(value, str) or re.fullmatch(
+        r"[0-9]+(?:\.[0-9]+)?", value, re.ASCII,
+    ) is None:
+        _invalid(field, "invalid_time")
+    try:
+        return float(value)
+    except (ValueError, OverflowError):
+        _invalid(field, "invalid_time")
+
+
+def _normalise_mpd_status(raw):
+    if not isinstance(raw, dict):
+        _invalid("status", "invalid_fields")
+
+    result = {
+        "state": None,
+        "songid": None,
+        "playlistlength": None,
+        "repeat": None,
+        "random": None,
+        "single": None,
+        "consume": None,
+        "elapsed": None,
+        "duration": None,
+        "hasError": False,
+    }
+    converters = {
+        "playlistlength": _parse_mpd_integer,
+        "repeat": _parse_mpd_option,
+        "random": _parse_mpd_option,
+        "single": _parse_mpd_single,
+        "consume": _parse_mpd_single,
+        "elapsed": _parse_mpd_time,
+        "duration": _parse_mpd_time,
+    }
+
+    for field, converter in converters.items():
+        if field in raw:
+            result[field] = converter(raw[field], field)
+    for field in ("state", "songid"):
+        if field in raw:
+            value = raw[field]
+            if not isinstance(value, str):
+                _invalid(field, "invalid_string")
+            result[field] = value
+    if "error" in raw:
+        error = raw["error"]
+        if not isinstance(error, str):
+            _invalid("error", "invalid_string")
+        result["hasError"] = bool(error)
+
+    return _normalise_status(result)
+
+
 def _normalise_status(value):
     if not isinstance(value, dict) or set(value) != _STATUS_FIELDS:
         _invalid("status", "invalid_fields")
