@@ -53,6 +53,9 @@ jobs:
 
         python3 -m pip install --upgrade pip
         pip3 install -r requirements.txt
+        # The runtime timer imports the publisher package, which needs pyzmq.
+        # Keep it CI-only: production Pi builds pyzmq with websocket support.
+        pip3 install pyzmq
         # For operation of the Jukebox, ZMQ must be compiled from sources due to Websocket support
         # Also install all optional dependencies
         pip3 install -r src/jukebox/components/rfid/hardware/fake_reader_gui/requirements.txt
