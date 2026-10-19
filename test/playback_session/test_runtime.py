@@ -607,9 +607,12 @@ class RuntimeMpdIntegrationTests(unittest.TestCase):
     def _run_in_bounded_subprocess(self, test_name):
         environment = os.environ.copy()
         environment["PHONIEBOX_ISOLATED_RUNTIME_TEST"] = test_name
+        pytest_config = _STAGE / "pytest.ini"
+        if not pytest_config.is_file():
+            pytest_config = _STAGE / "context" / "pytest.ini"
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-c",
-             "context/pytest.ini", "-q", "-o",
+             str(pytest_config), "-q", "-o",
              "addopts=-rf --import-mode=importlib",
              "test/playback_session/test_runtime.py::RuntimeMpdIntegrationTests::" + test_name],
             cwd=str(_STAGE), env=environment, capture_output=True, text=True, timeout=15.0)
