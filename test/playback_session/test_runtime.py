@@ -743,4 +743,168 @@ class RuntimeMpdIntegrationTests(unittest.TestCase):
         ref = {"kind": "LOCAL", "libraryId": self.entry["libraryId"]}
         runtime.request_start("entry_first", ref)
         self.wait_for(lambda: (runtime.snapshot()["service"]["gate"]["owner"] or {}).get("entryId")
-                    <çOm¢G§²ÚîÆ­yÐ€€Í•±˜¹}¡•­}…Ñ¥Ù” ¤(€€€€€€€Í•±˜¹}¡•­}‘•…‘±¥¹” ¤(€€€€€€€¥˜Í•±˜¹}ÕÉÉ•¹Ñ}•Á½  ¤€„ôÍ•±˜¹}…ÁÑÕÉ•‘}•Á½ è(€€€€€€€€€€€Í•±˜¹}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰U9Y%1	1ˆ¤(€€€€€€€ÑÉäè(€€€€€€€€€€€É•ÍÕ±Ð€ô•Ñ…ÑÑÈ¡Í•±˜¹Í•ÍÍ¥½¸¹±¥•¹Ð°¹…µ”¤ ©…ÉÌ¤(€€€€€€€•á•ÁÐµÁ¹‰…Í”¹½µµ…¹‘ÉÉ½Èè(€€€€€€€€€€€Í•±˜¹}¡•­}…™Ñ•É}…±° ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰=559}I)Qˆ¤™É½´9½¹”(€€€€€€€•á•ÁÐá•ÁÑ¥½¸è(€€€€€€€€€€€•áÁ¥É•€ôÍ•±˜¹}•áÁ¥É• ¤½ÈÍ•±˜¹Í•ÍÍ¥½¸¹}µ½¹½Ñ½¹¥Œ ¤€øôÍ•±˜¹‘•…‘±¥¹”(€€€€€€€€€€€Í•±˜¹}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰Q%5=UPˆ¥˜•áÁ¥É••±Í”€‰U9Y%1	1ˆ¤™É½´9½¹”(€€€€€€€Í•±˜¹}¡•­}…™Ñ•É}…±° ¤(€€€€€€€É•ÑÕÉ¸É•ÍÕ±Ð((€€€‘•˜}¡•­}…Ñ¥Ù”¡Í•±˜¤è(€€€€€€€¥˜¹½ÐÍ•±˜¹}…Ñ¥Ù”½ÈÑ¡É•…‘¥¹œ¹•Ñ}¥‘•¹Ð ¤€„ôÍ•±˜¹}½Ý¹•É}Ñ¡É•…è(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰U9Y%1	1ˆ¤((€€€‘•˜}¡•­}‘•…‘±¥¹”¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹}•áÁ¥É• ¤½ÈÍ•±˜¹Í•ÍÍ¥½¸¹}µ½¹½Ñ½¹¥Œ ¤€øôÍ•±˜¹‘•…‘±¥¹”è(€€€€€€€€€€€Í•±˜¹}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰Q%5=UPˆ¤((€€€‘•˜}¡•­}…™Ñ•É}…±°¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹}•áÁ¥É• ¤½ÈÍ•±˜¹Í•ÍÍ¥½¸¹}µ½¹½Ñ½¹¥Œ ¤€øôÍ•±˜¹‘•…‘±¥¹”è(€€€€€€€€€€€Í•±˜¹}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰Q%5=UPˆ¤(€€€€€€€¥˜Í•±˜¹}ÕÉÉ•¹Ñ}•Á½  ¤€„ôÍ•±˜¹}…ÁÑÕÉ•‘}•Á½ è(€€€€€€€€€€€Í•±˜¹}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ ¤(€€€€€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰U9Y%1	1ˆ¤((€€€‘•˜}ÕÉÉ•¹Ñ}•Á½ ¡Í•±˜¤è(€€€€€€€•Á½ €ôÍ•±˜¹Í•ÍÍ¥½¸¹±¥•¹Ð¹Í•ÍÍ¥½¹}•Á½ (€€€€€€€¥˜•Á½ ¥Ì9½¹”è(€€€€€€€€€€€Í•±˜¹Í•ÍÍ¥½¸¹±¥•¹Ð¹}Í•ÍÍ¥½¹}Á½¥Í½¹•€ôQÉÕ”(€€€€€€€É•ÑÕÉ¸•Á½ ((€€€‘•˜}…Éµ}Ý…Ñ¡‘½œ¡Í•±˜¤è(€€€€€€€Í•±˜¹}Ý…Ñ¡‘½œ€ô}]…Ñ¡‘½œ¡Í•±˜¹}Í½­•Ð°Í•±˜¹‘•…‘±¥¹”°Í•±˜¹Í•ÍÍ¥½¸¹}µ½¹½Ñ½¹¥Œ¤(€€€€€€€Í•±˜¹}Ý…Ñ¡‘½œ¹ÍÑ…ÉÐ ¤((€€€‘•˜}•áÁ¥É•¡Í•±˜¤è(€€€€€€€É•ÑÕÉ¸Í•±˜¹}Ý…Ñ¡‘½œ¥Ì¹½Ð9½¹”…¹Í•±˜¹}Ý…Ñ¡‘½œ¹•áÁ¥É•((€€€‘•˜}‘¥Í…Éµ}Ý…Ñ¡‘½œ¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹}Ý…Ñ¡‘½œ¥Ì¹½Ð9½¹”è(€€€€€€€€€€€Í•±˜¹}Ý…Ñ¡‘½œ¹‘¥Í…É´ ¤((€€€‘•˜}¥¹Ù…±¥‘…Ñ•}ÑÉ…¹ÍÁ½ÉÐ¡Í•±˜¤è(€€€€€€€Í•±˜¹}Í¡ÕÑ‘½Ý¹}½Ý¹•‘}Í½­•Ð ¤(€€€€€€€±¥•¹Ð€ôÍ•±˜¹Í•ÍÍ¥½¸¹±¥•¹Ð(€€€€€€€¥˜±¥•¹Ð¹}Í•ÍÍ¥½¹}•Á½ €„ôÍ•±˜¹}…ÁÑÕÉ•‘}•Á½ è(€€€€€€€€€€€É•ÑÕÉ¸(€€€€€€€±¥•¹Ð¹}Í•ÍÍ¥½¹}•Á½ €ô9½¹”(€€€€€€€±¥•¹Ð¹}Í•ÍÍ¥½¹}Á½¥Í½¹•€ôQÉÕ”(€€€€€€€ÑÉäè(€€€€€€€€€€€±¥•¹Ð¹‘¥Í½¹¹•Ð ¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸è(€€€€€€€€€€€±¥•¹Ð¹}Í•ÍÍ¥½¹}Á½¥Í½¹•€ôQÉÕ”((€€€‘•˜}Í¡ÕÑ‘½Ý¹}½Ý¹•‘}Í½­•Ð¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹}Í½­•Ð¥Ì¹½Ð9½¹”è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Í•±˜¹}Í½­•Ð¹Í¡ÕÑ‘½Ý¸¡Í½­•Ð¹M!UQ}I]H¤(€€€€€€€€€€€•á•ÁÐ=MÉÉ½Èè(€€€€€€€€€€€€€€€Á…ÍÌ((€€€‘•˜}±½Í•}Í½­•Ð¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹}Í½­•Ð¥Ì¹½Ð9½¹”è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Í•±˜¹}Í½­•Ð¹±½Í” ¤(€€€€€€€€€€€•á•ÁÐ=MÉÉ½Èè(€€€€€€€€€€€€€€€Á…ÍÌ(€€€€€€€€€€€Í•±˜¹}Í½­•Ð€ô9½¹”(()±…ÍÌ}]…Ñ¡‘½œè(€€€‘•˜}}¥¹¥Ñ}|¡Í•±˜°Í½¬°‘•…‘±¥¹”°µ½¹½Ñ½¹¥Œ¤è(€€€€€€€Í•±˜¹}Í½­•Ð€ôÍ½¬(€€€€€€€Í•±˜¹}‘•…‘±¥¹”€ô‘•…‘±¥¹”(€€€€€€€Í•±˜¹}µ½¹½Ñ½¹¥Œ€ôµ½¹½Ñ½¹¥Œ(€€€€€€€Í•±˜¹}Ý…­”€ôÑ¡É•…‘¥¹œ¹Ù•¹Ð ¤(€€€€€€€Í•±˜¹}ÍÑ…Ñ•}±½¬€ôÑ¡É•…‘¥¹œ¹1½¬ ¤(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ô€‰…Ñ¥Ù”ˆ(€€€€€€€Í•±˜¹}Ñ¡É•…€ôÑ¡É•…‘¥¹œ¹Q¡É•…¡Ñ…É•ÐõÍ•±˜¹}ÉÕ¸°¹…µ”ô‰µÁµÍ•ÍÍ¥½¸µ‘•…‘±¥¹”ˆ°‘…•µ½¸õQÉÕ”¤((€€€ÁÉ½Á•ÉÑä(€€€‘•˜•áÁ¥É•¡Í•±˜¤è(€€€€€€€Ý¥Ñ Í•±˜¹}ÍÑ…Ñ•}±½¬è(€€€€€€€€€€€É•ÑÕÉ¸Í•±˜¹}ÍÑ…Ñ”€ôô€‰•áÁ¥É•ˆ((€€€‘•˜ÍÑ…ÉÐ¡Í•±˜¤è(€€€€€€€Í•±˜¹}Ñ¡É•…¹ÍÑ…ÉÐ ¤((€€€‘•˜‘¥Í…É´¡Í•±˜¤è(€€€€€€€Ý¥Ñ Í•±˜¹}ÍÑ…Ñ•}±½¬è(€€€€€€€€€€€¥˜Í•±˜¹}ÍÑ…Ñ”€ôô€‰…Ñ¥Ù”ˆè(€€€€€€€€€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ô€‰‘¥Í…Éµ•ˆ(€€€€€€€€€€€Í•±˜¹}Ý…­”¹Í•Ð ¤((€€€‘•˜}ÉÕ¸¡Í•±˜¤è(€€€€€€€Ý¡¥±”QÉÕ”è(€€€€€€€€€€€É•µ…¥¹¥¹œ€ôÍ•±˜¹}‘•…‘±¥¹”€´Í•±˜¹}µ½¹½Ñ½¹¥Œ ¤(€€€€€€€€€€€¥˜É•µ…¥¹¥¹œ€ðô€Àè(€€€€€€€€€€€€€€€‰É•…¬(€€€€€€€€€€€Í•±˜¹}Ý…­”¹Ý…¥Ð¡µ¥¸¡É•µ…¥¹¥¹œ°Ñ¡É•…‘¥¹œ¹Q%5=UQ}5`¤¤(€€€€€€€€€€€¥˜Í•±˜¹}Ý…­”¹¥Í}Í•Ð ¤è(€€€€€€€€€€€€€€€É•ÑÕÉ¸(€€€€€€€Ý¥Ñ Í•±˜¹}ÍÑ…Ñ•}±½¬è(€€€€€€€€€€€¥˜Í•±˜¹}ÍÑ…Ñ”€„ô€‰…Ñ¥Ù”ˆè(€€€€€€€€€€€€€€€É•ÑÕÉ¸(€€€€€€€€€€€¥˜Í•±˜¹}µ½¹½Ñ½¹¥Œ ¤€ðÍ•±˜¹}‘•…‘±¥¹”è(€€€€€€€€€€€€€€€É•ÑÕÉ¸(€€€€€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ô€‰•áÁ¥É•ˆ(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Í•±˜¹}Í½­•Ð¹Í¡ÕÑ‘½Ý¸¡Í½­•Ð¹M!UQ}I]H¤(€€€€€€€€€€€•á•ÁÐ=MÉÉ½Èè(€€€€€€€€€€€€€€€Á…ÍÌ(()‘•˜}Ù…±¥‘…Ñ•}‘•…‘±¥¹”¡‘•…‘±¥¹”¤è(€€€¥˜¥Í¥¹ÍÑ…¹”¡‘•…‘±¥¹”°‰½½°¤½È¹½Ð¥Í¥¹ÍÑ…¹”¡‘•…‘±¥¹”°€¡¥¹Ð°™±½…Ð¤¤è(€€€€€€€É…¥Í”Y…±Õ•ÉÉ½È ‰•…‘±¥¹”µÕÍÐ‰”™¥¹¥Ñ”µ½¹½Ñ½¹¥ŒÍ•½¹‘Ì¸ˆ¤(€€€ÑÉäè(€€€€€€€™¥¹¥Ñ”€ôµ…Ñ ¹¥Í™¥¹¥Ñ”¡‘•…‘±¥¹”¤(€€€•á•ÁÐ€¡=Ù•É™±½ÝÉÉ½È°QåÁ•ÉÉ½È¤è(€€€€€€€™¥¹¥Ñ”€ô…±Í”(€€€¥˜¹½Ð™¥¹¥Ñ”è(€€€€€€€É…¥Í”Y…±Õ•ÉÉ½È ‰•…‘±¥¹”µÕÍÐ‰”™¥¹¥Ñ”µ½¹½Ñ½¹¥ŒÍ•½¹‘Ì¸ˆ¤(€€€É•ÑÕÉ¸™±½…Ð¡‘•…‘±¥¹”¤(()‘•˜}‘ÕÁ±¥…Ñ•}½¹¹•Ñ•‘}Í½­•Ð¡±¥•¹Ð¤è(€€€ÑÉäè(€€€€€€€‘•ÍÉ¥ÁÑ½È€ô±¥•¹Ð¹™¥±•¹¼ ¤(€€€€€€€¥˜‘•ÍÉ¥ÁÑ½È€ð€Àè(€€€€€€€€€€€É…¥Í”=MÉÉ½È ‰5A±¥•¹Ð¥Ì‘¥Í½¹¹•Ñ•ˆ¤(€€€€€€€‰½ÉÉ½Ý•€ôÍ½­•Ð¹Í½­•Ð¡™¥±•¹¼õ‘•ÍÉ¥ÁÑ½È¤(€€€€€€€ÑÉäè(€€€€€€€€€€€‘ÕÁ±¥…Ñ”€ô‰½ÉÉ½Ý•¹‘ÕÀ ¤(€€€€€€€™¥¹…±±äè(€€€€€€€€€€€‰½ÉÉ½Ý•¹‘•Ñ…  ¤(€€€€€€€É•ÑÕÉ¸‘ÕÁ±¥…Ñ”(€€€•á•ÁÐá•ÁÑ¥½¸è(€€€€€€€É…¥Í”M•ÍÍ¥½¹…¥±ÕÉ” ‰U9Y%1	1ˆ¤™É½´9½¹”
+                      == "entry_first"
+                      and runtime.snapshot()["service"]["gate"]["inFlight"] is None
+                      and runtime.snapshot()["service"]["pending"] is None)
+        runtime.request_start("entry_second", ref)
+        self.wait_for(lambda: (runtime.snapshot()["service"]["gate"]["owner"] or {}).get("entryId")
+                      == "entry_second"
+                      and runtime.snapshot()["service"]["gate"]["inFlight"] is None
+                      and runtime.snapshot()["service"]["pending"] is None)
+        commands = list(self.server.commands)
+        stops = [index for index, command in enumerate(commands) if command == "stop"]
+        plays = [index for index, command in enumerate(commands) if command.startswith("playid ")]
+        self.assertEqual(1, len(stops))
+        self.assertEqual(2, len(plays))
+        self.assertLess(plays[0], stops[0])
+        self.assertLess(stops[0], plays[1])
+        runtime.request_stop()
+        self.wait_for(lambda: runtime.snapshot()["service"]["quiescent"])
+        self.assertEqual("CLOSED", runtime.finish_shutdown(
+            deadline=time.monotonic() + 3.0)["phase"])
+
+    def test_transport_loss_during_start_closes_admission_and_keeps_owner(self):
+        if os.environ.get("PHONIEBOX_ISOLATED_RUNTIME_TEST") != self._testMethodName:
+            self._run_in_bounded_subprocess(self._testMethodName)
+            return
+        runtime = self.runtime()
+        self.assertTrue(runtime.start(deadline=time.monotonic() + 3.0)["ready"])
+        self.server.no_ack_command = "playid"
+        runtime.request_start("disconnect_entry", {"kind": "LOCAL", "libraryId": self.entry["libraryId"]})
+        self.wait_for(lambda: runtime.snapshot()["phase"] == "UNAVAILABLE")
+        self.assertFalse(runtime.snapshot()["ready"])
+        with self.assertRaises(GateStateError):
+            runtime.request_start("blocked_entry", {"kind": "LOCAL", "libraryId": self.entry["libraryId"]})
+        self.server.no_ack_command = None
+        runtime.request_stop()
+        self.wait_for(lambda: runtime.snapshot()["failure"] == {"code": "STOP_UNCONFIRMED"})
+        incomplete = runtime.finish_shutdown(deadline=time.monotonic() + 1.0)
+        self.assertEqual("SHUTDOWN_INCOMPLETE", incomplete["failure"]["code"])
+        self.assertTrue(incomplete["ownerLockHeld"])
+        self.assertTrue(runtime._stop_timer(deadline=time.monotonic() + 1.0))
+        self.assertFalse(runtime.snapshot()["driverAlive"])
+
+    def test_unsafe_owner_path_and_credential_fail_before_readiness(self):
+        unsafe = self.runtime()
+        self.lock_directory.chmod(0o755)
+        rejected = unsafe.start(deadline=time.monotonic() + 3.0)
+        self.assertEqual({"code": "OWNER_PATH_UNSAFE"}, rejected["failure"])
+        self.assertEqual([], self.server.commands)
+        self.lock_directory.chmod(0o700)
+
+        self.credential.chmod(0o644)
+        rejected_credential = self.runtime().start(deadline=time.monotonic() + 3.0)
+        self.assertEqual({"code": "CREDENTIAL_UNAVAILABLE"}, rejected_credential["failure"])
+        self.assertFalse(rejected_credential["ownerLockHeld"])
+        self.credential.chmod(0o600)
+
+    def test_bootstrap_status_timeout_cleans_owner_without_claiming_ready(self):
+        self.server.status_delay = 0.4
+        runtime = self.runtime()
+        state = runtime.start(deadline=time.monotonic() + 0.15)
+        self.assertFalse(state["ready"])
+        self.assertEqual("BOOTSTRAP_FAILED", state["failure"]["code"])
+        self.assertFalse(state["ownerLockHeld"])
+
+    def test_bootstrap_context_exit_and_epoch_change_fail_before_ready(self):
+        original_transaction = MpdSession.transaction
+        for mode in ("exit", "epoch"):
+            with self.subTest(mode=mode):
+                def injected_transaction(session, deadline, mode=mode):
+                    @contextmanager
+                    def transaction_context():
+                        with original_transaction(session, deadline) as transaction:
+                            yield transaction
+                            if mode == "epoch":
+                                session.client._session_epoch = "rotated_bootstrap_epoch"
+                        if mode == "exit":
+                            raise SessionFailure("TIMEOUT")
+                    return transaction_context()
+
+                with patch.object(MpdSession, "transaction", injected_transaction):
+                    state = self.runtime().start(deadline=time.monotonic() + 3.0)
+                self.assertFalse(state["ready"])
+                self.assertEqual("BOOTSTRAP_FAILED", state["failure"]["code"])
+                self.assertFalse(state["ownerLockHeld"])
+                self.server.commands.clear()
+
+    def test_blocked_bootstrap_and_finish_share_teardown_barrier(self):
+        runtime = self.runtime()
+        entered, release = threading.Event(), threading.Event()
+        original_command = self.server._command
+
+        def block_after_status(conn, line):
+            original_command(conn, line)
+            if line == "status" and not entered.is_set():
+                entered.set()
+                release.wait(2.0)
+
+        self.server._command = block_after_status
+        started = {}
+        starter = threading.Thread(target=lambda: started.setdefault(
+            "state", runtime.start(deadline=time.monotonic() + 4.0)))
+        starter.start()
+        self.assertTrue(entered.wait(1.0))
+        finished = {}
+        finisher = threading.Thread(target=lambda: finished.setdefault(
+            "state", runtime.finish_shutdown(deadline=time.monotonic() + 4.0)))
+        finisher.start()
+        time.sleep(0.03)
+        self.assertTrue(finisher.is_alive())
+        release.set()
+        starter.join(2.0)
+        finisher.join(2.0)
+        self.assertFalse(starter.is_alive())
+        self.assertFalse(finisher.is_alive())
+        self.assertEqual("CLOSING", started["state"]["phase"])
+        self.assertEqual("CLOSED", finished["state"]["phase"])
+        self.assertFalse(finished["state"]["ownerLockHeld"])
+
+    def test_shutdown_during_mutated_blocked_start_drains_before_disconnect(self):
+        runtime = self.runtime()
+        self.assertTrue(runtime.start(deadline=time.monotonic() + 3.0)["ready"])
+        entered, release = threading.Event(), threading.Event()
+        original_command = self.server._command
+
+        def block_after_playid(conn, line):
+            original_command(conn, line)
+            if line.startswith("playid "):
+                entered.set()
+                release.wait(2.0)
+
+        self.server._command = block_after_playid
+        runtime.request_start("blocked_play", {"kind": "LOCAL", "libraryId": self.entry["libraryId"]})
+        self.assertTrue(entered.wait(1.0))
+        runtime.begin_shutdown()
+        finished = {}
+        finisher = threading.Thread(target=lambda: finished.setdefault(
+            "state", runtime.finish_shutdown(deadline=time.monotonic() + 4.0)))
+        finisher.start()
+        time.sleep(0.03)
+        self.assertTrue(finisher.is_alive())
+        release.set()
+        finisher.join(3.0)
+        self.assertFalse(finisher.is_alive())
+        self.assertEqual("CLOSED", finished["state"]["phase"])
+        commands = list(self.server.commands)
+        play_index = next(index for index, item in enumerate(commands) if item.startswith("playid "))
+        self.assertIn("stop", commands[play_index + 1:])
+
+    def test_second_runtime_cannot_acquire_same_process_owner_lock(self):
+        owner = self.runtime()
+        contender = self.runtime()
+        self.assertTrue(owner.start(deadline=time.monotonic() + 3.0)["ready"])
+        state = contender.start(deadline=time.monotonic() + 3.0)
+        self.assertEqual({"code": "OWNER_BUSY"}, state["failure"])
+        self.assertFalse(state["ownerLockHeld"])
+        closed = owner.finish_shutdown(deadline=time.monotonic() + 3.0)
+        self.assertEqual("CLOSED", closed["phase"])
+
+
+class PathLikeFixture:
+    def __fspath__(self):
+        return "/tmp/pathlike"
+
+
+if __name__ == "__main__":
+    unittest.main()
