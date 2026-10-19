@@ -92,7 +92,13 @@ class RuntimeProcessLockTests(unittest.TestCase):
                     if not selector.select(timeout):
                         self.fail("runtime child did not report before its deadline")
                     line = process.stdout.readline()
-                    self.assertTrue(line, "runtime child exited without a result")
+                    if not line:
+                        returncode = process.poll()
+                        if returncode is None:
+                            self.fail("runtime child closed stdout without exiting")
+                        stderr = process.stderr.read()
+                        self.fail("runtime child exited with code {} without a result; stderr: {}"
+                                   .format(returncode, stderr))
                     return json.loads(line)
                 finally:
                     selector.close()
