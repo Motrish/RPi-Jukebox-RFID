@@ -351,10 +351,10 @@ class LocalProvider:
             raise _ProviderFault("PROVIDER_UNAVAILABLE") from None
 
     def _status(self, context, operation, identity, guard, deadline, epoch):
-        raw = self._invoke(
-            context, "status", (), operation, identity, guard, deadline, epoch,
-        )
         try:
+            raw = self._invoke(
+                context, "status", (), operation, identity, guard, deadline, epoch,
+            )
             status = _normalise_status(raw)
             status["_observedAtMonotonic"] = self._read_clock()
             return status
@@ -375,14 +375,9 @@ class LocalProvider:
         was_uncertain = self._uncertain
         if before_call is not None:
             before_call()
-        try:
-            result = callback(*args)
-        except SessionFailure as failure:
-            if failure.code == "COMMAND_REJECTED" and before_call is not None:
-                self._uncertain = was_uncertain
-            raise _session_fault(failure, operation, effect=before_call is not None) from None
-        except Exception:
-            raise _ProviderFault("PROVIDER_UNAVAILABLE", effect=before_call is not None) from None
+        result = self._invoke_callback(
+            callback, args, method, operation, before_call, was_uncertain,
+        )
         try:
             self._check_epoch(context, epoch, operation)
             self._check_deadline(operation, deadline)
@@ -391,6 +386,21 @@ class LocalProvider:
                 fault.effect = True
             raise
         return result
+
+    def _invoke_callback(self, callback, args, method, operation, before_call,
+                         was_uncertain):
+        try:
+            return callback(*args)
+        except SessionFailure as failure:
+            if failure.code == "COMMAND_REJECTED" and before_call is not None:
+                self._uncertain = was_uncertain
+            raise _session_fault(failure, operation, effect=before_call is not None) from None
+        except ContractValidationError:
+            if method == "status":
+                raise
+            raise _ProviderFault("PROVIDER_UNAVAILABLE", effect=before_call is not None) from None
+        except Exception:
+            raise _ProviderFault("PROVIDER_UNAVAILABLE", effect=before_call is not None) from None
 
     def _check_guard_deadline(self, guard, identity, operation, deadline):
         self._check_deadline(operation, deadline)

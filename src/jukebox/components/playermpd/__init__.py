@@ -83,12 +83,12 @@ sudo -u mpd speaker-test -t wav -c 2
 
 import os
 import mpd
-import threading
 import logging
 import time
 import functools
 from pathlib import Path
 import components.player
+from components.local_provider.mpd_session import MpdLock, TrackedMPDClient
 import jukebox.cfghandler
 import jukebox.utils as utils
 import jukebox.plugs as plugs
@@ -103,40 +103,6 @@ from .coverart_cache_manager import CoverartCacheManager
 
 logger = logging.getLogger('jb.PlayerMPD')
 cfg = jukebox.cfghandler.get_handler('jukebox')
-
-
-class MpdLock:
-    def __init__(self, client: mpd.MPDClient, host: str, port: int):
-        self._lock = threading.RLock()
-        self.client = client
-        self.host = host
-        self.port = port
-
-    def _try_connect(self):
-        try:
-            self.client.connect(self.host, self.port)
-        except mpd.base.ConnectionError:
-            pass
-
-    def __enter__(self):
-        self._lock.acquire()
-        self._try_connect()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._lock.release()
-
-    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
-        locked = self._lock.acquire(blocking, timeout)
-        if locked:
-            self._try_connect()
-        return locked
-
-    def release(self):
-        self._lock.release()
-
-    def locked(self):
-        return self._lock.locked()
 
 
 class PlayerMPD:
@@ -181,7 +147,7 @@ class PlayerMPD:
                                                            'none': lambda: None},
                                                           logger)
 
-        self.mpd_client = mpd.MPDClient()
+        self.mpd_client = TrackedMPDClient()
         self.coverart_cache_manager = CoverartCacheManager()
 
         # The timeout refer to the low-level socket time-out
@@ -221,7 +187,9 @@ class PlayerMPD:
         self.old_song = None
         self.mpd_status = {}
         self.mpd_status_poll_interval = 0.25
-        self.mpd_lock = MpdLock(self.mpd_client, self.mpd_host, 6600)
+        self.mpd_lock = MpdLock(
+            self.mpd_client, self.mpd_host, 6600, shared_lock=self.mpd_client.shared_lock,
+        )
         self.status_is_closing = False
         # self.status_thread = threading.Timer(self.mpd_status_poll_interval, self._mpd_status_poll).start()
 
