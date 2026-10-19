@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import stat
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,46 @@ if config["hold"] and state["ready"]:
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "process owner flock semantics require Linux")
 class RuntimeProcessLockTests(unittest.TestCase):
+    def test_helper_acquires_and_releases_exclusive_descriptor(self):
+        from components.playback_session.runtime import (
+            _OwnerBusy, _acquire_audio_owner_descriptor,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "owner-lock"
+            lock.mkdir(mode=0o700)
+            lock.chmod(0o700)
+            descriptor = _acquire_audio_owner_descriptor(lock_directory=str(lock))
+            try:
+                info = os.fstat(descriptor)
+                self.assertTrue(stat.S_ISREG(info.st_mode))
+                self.assertEqual(0o600, stat.S_IMODE(info.st_mode))
+                with self.assertRaises(_OwnerBusy):
+                    _acquire_audio_owner_descriptor(lock_directory=str(lock))
+            finally:
+                os.close(descriptor)
+
+            released = _acquire_audio_owner_descriptor(lock_directory=str(lock))
+            os.close(released)
+
+    def test_helper_rejects_unsafe_and_missing_directories(self):
+        from components.playback_session.runtime import (
+            _OwnerUnsafe, _acquire_audio_owner_descriptor,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            unsafe = Path(temporary) / "unsafe-lock"
+            unsafe.mkdir(mode=0o755)
+            unsafe.chmod(0o755)
+            with self.assertRaises(_OwnerUnsafe):
+                _acquire_audio_owner_descriptor(lock_directory=str(unsafe))
+            self.assertFalse((unsafe / "audio-owner.lock").exists())
+
+            missing = Path(temporary) / "missing-lock"
+            with self.assertRaises(_OwnerUnsafe):
+                _acquire_audio_owner_descriptor(lock_directory=str(missing))
+            self.assertFalse(missing.exists())
+
     def test_different_cwds_contend_before_mpd_connect_and_preserve_lock_inode(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
