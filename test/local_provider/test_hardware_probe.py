@@ -89,7 +89,7 @@ class ProbeTests(unittest.TestCase):
     def test_failed_start_ack_uses_same_lease_cleanup_and_no_reconnect(self):
         self.server.ack_command = "playid"
         with patch("tools.hardware.local_provider_probe.TrackedMPDClient.connect",
-                   autospec=True, wraps=TrackedMPDClient.connect) as connect:
+                   autospec=True, side_effect=TrackedMPDClient.connect) as connect:
             receipts = self.run_private_probe()
         self.assertNotEqual("CONFIRMED", receipts[0]["outcome"])
         self.assertEqual("STOP", receipts[-1]["operation"])
@@ -100,7 +100,7 @@ class ProbeTests(unittest.TestCase):
     def test_missing_start_response_does_not_reconnect_or_issue_later_actions(self):
         self.server.no_ack_command = "playid"
         with patch("tools.hardware.local_provider_probe.TrackedMPDClient.connect",
-                   autospec=True, wraps=TrackedMPDClient.connect) as connect:
+                   autospec=True, side_effect=TrackedMPDClient.connect) as connect:
             receipts = self.run_private_probe()
         self.assertNotEqual("CONFIRMED", receipts[0]["outcome"])
         self.assertEqual("STOP", receipts[-1]["operation"])
@@ -122,7 +122,7 @@ class ProbeTests(unittest.TestCase):
             raise BrokenPipeError("closed output")
 
         with patch("tools.hardware.local_provider_probe.TrackedMPDClient.disconnect",
-                   autospec=True, wraps=original_disconnect) as disconnect:
+                   autospec=True, side_effect=original_disconnect) as disconnect:
             with self.assertRaisesRegex(BrokenPipeError, "closed output"):
                 run_probe(music_root=self.root, port=self.server.port, emit=fail_output)
         self.assertEqual(1, disconnect.call_count)
