@@ -177,6 +177,12 @@ class _Transaction:
     def status(self):
         return _normalise_mpd_status(self._call("status"))
 
+    def password(self, secret):
+        """Authenticate this tracked connection without bypassing transaction guards."""
+        if type(secret) is not str or not secret:
+            raise ValueError("Password must be a non-empty string.")
+        self._call("password", secret)
+
     def repeat(self, value):
         self._call("repeat", value)
 
