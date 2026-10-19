@@ -771,7 +771,8 @@ class RuntimeMpdIntegrationTests(unittest.TestCase):
             self._run_in_bounded_subprocess(self._testMethodName)
             return
         runtime = self.runtime()
-        self.assertTrue(runtime.start(deadline=time.monotonic() + 3.0)["ready"])
+        started = runtime.start(deadline=time.monotonic() + 3.0)
+        self.assertTrue(started["ready"], {"state": started, "commands": list(self.server.commands)})
         self.server.no_ack_command = "playid"
         runtime.request_start("disconnect_entry", {"kind": "LOCAL", "libraryId": self.entry["libraryId"]})
         self.wait_for(lambda: runtime.snapshot()["phase"] == "UNAVAILABLE")

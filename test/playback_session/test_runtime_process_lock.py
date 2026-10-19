@@ -71,7 +71,7 @@ class RuntimeProcessLockTests(unittest.TestCase):
 
             server = _SERVER_MODULE.MPDServer()
             self.addCleanup(server.close)
-            source_paths = (str(_STAGE / "src"), str(_STAGE / "src" / "jukebox"))
+            source_paths = (str(_STAGE / "src" / "jukebox"),)
             pythonpath = os.pathsep.join(filter(None, [*source_paths, os.environ.get("PYTHONPATH", "")]))
 
             def launch(cwd, hold):
