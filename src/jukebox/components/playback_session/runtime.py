@@ -60,6 +60,10 @@ class LocalPlaybackRuntime:
         self._cleanup_driver_enabled = False
         self._stop_request_generation = 0
         self._resources_closed = False
+        self._client_closed = False
+        self._catalog_closed = False
+        self._shutdown_prepared = False
+        self._shutdown_io_closed = False
 
     def snapshot(self):
         with self._lock:
@@ -189,6 +193,8 @@ class LocalPlaybackRuntime:
             service = self._service
             if service is None:
                 raise GateStateError("NOT_READY")
+            if self._shutdown_io_closed or self._shutdown_prepared:
+                raise GateStateError("CLOSED")
             if self._phase == "CLOSED":
                 raise GateStateError("CLOSED")
             self._stop_request_generation += 1
@@ -218,8 +224,10 @@ class LocalPlaybackRuntime:
             self._begin_service_shutdown(service)
         return self.snapshot()
 
-    def finish_shutdown(self, *, deadline):
+    def finish_shutdown(self, *, deadline, release_owner=True):
         _validate_deadline(deadline)
+        if type(release_owner) is not bool:
+            raise ContractValidationError("release_owner", "invalid_boolean")
         with self._lock:
             if self._finish_active:
                 raise GateStateError("BUSY")
@@ -231,15 +239,27 @@ class LocalPlaybackRuntime:
         if already_closed:
             return self.snapshot()
         try:
+            if self._shutdown_prepared:
+                if not release_owner:
+                    return self.snapshot()
+                if float(deadline) <= self._read_clock():
+                    return self._shutdown_failure()
+                if not self._release_owner_lock():
+                    return self._shutdown_failure()
+                with self._lock:
+                    self._resources_closed = True
+                    self._phase, self._ready = "CLOSED", False
+                    self._failure = None
+                return self.snapshot()
             self.begin_shutdown()
             if float(deadline) <= self._read_clock():
                 return self._shutdown_failure()
-            return self._finish_until(deadline)
+            return self._finish_until(deadline, release_owner=release_owner)
         finally:
             with self._lock:
                 self._finish_active = False
 
-    def _finish_until(self, deadline):
+    def _finish_until(self, deadline, *, release_owner=True):
         if not self._wait_for_calls(deadline):
             return self._shutdown_failure()
         if not self._finish_service(deadline):
@@ -248,9 +268,18 @@ class LocalPlaybackRuntime:
             return self._shutdown_failure()
         if self._bootstrap_effect:
             return self._shutdown_failure("STOP_UNCONFIRMED")
-        if not self._close_resources():
-            return self._shutdown_failure()
         with self._lock:
+            self._shutdown_io_closed = True
+        if not self._close_resources(release_owner=release_owner):
+            return self._shutdown_failure()
+        if not release_owner:
+            with self._lock:
+                self._shutdown_prepared = True
+                self._phase, self._ready = "CLOSING", False
+                self._failure = None
+            return self.snapshot()
+        with self._lock:
+            self._resources_closed = True
             self._phase, self._ready = "CLOSED", False
             self._failure = None
         return self.snapshot()
@@ -440,25 +469,50 @@ class LocalPlaybackRuntime:
             self._bootstrap_active = False
         return self.snapshot()
 
-    def _close_resources(self):
+    def _close_resources(self, *, release_owner=True):
         with self._lock:
             if self._resources_closed:
                 return True
-        for resource, method in ((self._client, "disconnect"), (self._catalog, "close")):
+            client_closed, catalog_closed = self._client_closed, self._catalog_closed
+        for resource, method, flag in ((self._client, "disconnect", "client"),
+                                       (self._catalog, "close", "catalog")):
+            if (flag == "client" and client_closed) or (flag == "catalog" and catalog_closed):
+                continue
             if resource is not None:
                 try:
                     getattr(resource, method)()
                 except Exception:
                     return False
+                with self._lock:
+                    if flag == "client":
+                        self._client_closed = True
+                        client_closed = True
+                    else:
+                        self._catalog_closed = True
+                        catalog_closed = True
+            elif flag == "client":
+                with self._lock:
+                    self._client_closed = True
+                client_closed = True
+            else:
+                with self._lock:
+                    self._catalog_closed = True
+                catalog_closed = True
+        if not release_owner:
+            return True
+        return self._release_owner_lock()
+
+    def _release_owner_lock(self):
         with self._lock:
             owner_fd = self._owner_fd
         if owner_fd is not None:
-            os.close(owner_fd)
+            try:
+                os.close(owner_fd)
+            except OSError:
+                return False
             with self._lock:
                 if self._owner_fd == owner_fd:
                     self._owner_fd = None
-        with self._lock:
-            self._resources_closed = True
         return True
 
     def _shutdown_failure(self, code="SHUTDOWN_INCOMPLETE"):

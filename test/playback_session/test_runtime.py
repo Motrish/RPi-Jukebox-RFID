@@ -165,6 +165,65 @@ class RuntimeLifecycleRegressionTests(unittest.TestCase):
         runtime._timer = _ManualTimer()
         return runtime, service, provider, session, clock
 
+    def test_two_phase_shutdown_retries_only_failed_close_and_holds_owner_until_finalize(self):
+        runtime, _service, _provider, _session, clock = self.make_runtime()
+        client_calls = []
+
+        class Client:
+            def disconnect(self):
+                client_calls.append("disconnect")
+
+        class Catalog:
+            def __init__(self):
+                self.calls = 0
+
+            def close(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise OSError("first catalog close failed")
+
+        catalog = Catalog()
+        runtime._client = Client()
+        runtime._catalog = catalog
+        runtime._owner_fd = os.open(os.devnull, os.O_RDONLY)
+        deadline = clock.value + 3.0
+        failed = runtime.finish_shutdown(deadline=deadline, release_owner=False)
+        self.assertEqual("SHUTDOWN_INCOMPLETE", failed["failure"]["code"])
+        self.assertTrue(failed["ownerLockHeld"])
+        self.assertEqual(["disconnect"], client_calls)
+
+        prepared = runtime.finish_shutdown(deadline=deadline, release_owner=False)
+        self.assertEqual("CLOSING", prepared["phase"])
+        self.assertFalse(prepared["ready"])
+        self.assertTrue(prepared["quiescent"])
+        self.assertFalse(prepared["driverAlive"])
+        self.assertTrue(prepared["ownerLockHeld"])
+        self.assertIsNone(prepared["failure"])
+        self.assertEqual(["disconnect"], client_calls)
+        self.assertEqual(2, catalog.calls)
+        with self.assertRaises(GateStateError):
+            runtime.request_stop()
+
+        repeated = runtime.finish_shutdown(deadline=deadline, release_owner=False)
+        self.assertEqual(prepared, repeated)
+        self.assertEqual(["disconnect"], client_calls)
+        self.assertEqual(2, catalog.calls)
+        with self.assertRaises(ContractValidationError):
+            runtime.finish_shutdown(deadline=deadline, release_owner=1)
+        self.assertTrue(runtime.snapshot()["ownerLockHeld"])
+        snapshot_before_closed = runtime.snapshot()
+
+        closed = runtime.finish_shutdown(deadline=deadline, release_owner=True)
+        self.assertEqual("CLOSED", closed["phase"])
+        self.assertFalse(closed["ownerLockHeld"])
+        self.assertEqual(["disconnect"], client_calls)
+        self.assertEqual(2, catalog.calls)
+        self.assertEqual(closed, runtime.finish_shutdown(deadline=deadline, release_owner=True))
+        with self.assertRaises(ContractValidationError):
+            runtime.finish_shutdown(deadline=deadline, release_owner=0)
+        self.assertEqual(closed, runtime.snapshot())
+        self.assertNotEqual(snapshot_before_closed, closed)
+
     def test_stop_failure_latches_without_timer_retrigger_until_explicit_stop(self):
         runtime, service, _provider, session, clock = self.make_runtime()
         service.request_start("runtime_entry", _PROVIDER_FIXTURE["mediaRef"])
@@ -548,10 +607,10 @@ class RuntimeLifecycleRegressionTests(unittest.TestCase):
         entered, release = threading.Event(), threading.Event()
         original_finish_until = runtime._finish_until
 
-        def blocked_finish(deadline):
+        def blocked_finish(deadline, **kwargs):
             entered.set()
             release.wait(2.0)
-            return original_finish_until(deadline)
+            return original_finish_until(deadline, **kwargs)
 
         runtime._finish_until = blocked_finish
         first_result = {}

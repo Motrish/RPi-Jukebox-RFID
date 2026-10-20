@@ -60,8 +60,8 @@ def main():
         logger.warning(f"working_path: '{working_path}'")
         logger.warning(f"script_path : '{script_path}'")
     myjukebox = jukebox.daemon.get_jukebox_daemon(args.conf.name, args.artifacts)
-    myjukebox.run()
+    return myjukebox.run()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

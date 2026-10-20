@@ -94,6 +94,16 @@ import traceback
 logger = logging.getLogger('jb.plugin')
 logger_call = logging.getLogger('jb.plugin.call')
 
+
+class PluginShutdownError(Exception):
+    """Raised after strict shutdown attempts every callback and finds failures."""
+
+    def __init__(self, results, failures):
+        self.results = results
+        self.failures = failures
+        super().__init__("{} plugin shutdown callback(s) failed".format(len(failures)))
+
+
 # Do I want to use this?
 PluginType = Callable[..., Any]
 
@@ -629,7 +639,7 @@ def load_all_finalize(ignore_errors=False):
                     raise e
 
 
-def close_down(**kwargs) -> Any:
+def close_down(*, ignore_errors=True, **kwargs) -> Any:
     """
     Calls all functions registered with @atexit from all loaded modules in reverse order of module load order
 
@@ -640,16 +650,25 @@ def close_down(**kwargs) -> Any:
     :return:
     """
     results = []
+    failures = []
     assert sys.version_info.major >= 3 and sys.version_info.minor >= 7
     for loaded_as, pack in reversed(list(_PLUGINS.items())):
         for func in pack.atexit:
             logger.debug(f"Package closing atexit: calling {loaded_as}.{func.__name__}({kwargs})")
             try:
                 results.append(func(**kwargs))
-            except Exception as e:
-                logger.error(f"Ignoring failed package atexit function: '{loaded_as}.{func.__name__}()'")
+            except BaseException as e:
+                if ignore_errors and not isinstance(e, Exception):
+                    raise
+                message = ("Ignoring failed package atexit function" if ignore_errors
+                           else "Failed package atexit function")
+                logger.error(f"{message}: '{loaded_as}.{func.__name__}()'")
                 logger.error(f"Reason: {e.__class__.__name__}: {e.__str__()}")
                 logger.error(f"Detailed reason:\n{traceback.format_exc()}")
+                if not ignore_errors:
+                    failures.append((loaded_as, func, e))
+    if failures:
+        raise PluginShutdownError(results, failures)
     return results
 
 
