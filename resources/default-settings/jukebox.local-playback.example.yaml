@@ -1,0 +1,13 @@
+local_playback:
+  enabled: true
+  database_path: /home/pi/RPi-Jukebox-RFID/data/library.sqlite
+  library_root: /home/pi/RPi-Jukebox-RFID/shared/audiofolders
+  credential_path: /etc/phoniebox/mpd-owner.password
+
+# Restricted profile: configure only the diagnostic publisher and misc modules.
+# Any other module alias, source package, or entry under modules.others is rejected.
+modules:
+  named:
+    publishing: publishing
+  others:
+    - misc

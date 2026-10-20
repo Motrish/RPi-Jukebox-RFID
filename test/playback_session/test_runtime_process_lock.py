@@ -40,7 +40,11 @@ runtime = LocalPlaybackRuntime(
 state = runtime.start(deadline=time.monotonic() + 5.0)
 print(json.dumps({"event": "started", "state": state, "connectAttempts": len(attempts)}), flush=True)
 if config["hold"] and state["ready"]:
-    sys.stdin.readline()
+    command = sys.stdin.readline().strip()
+    if command == "prepare":
+        prepared = runtime.finish_shutdown(deadline=time.monotonic() + 3.0, release_owner=False)
+        print(json.dumps({"event": "prepared", "state": prepared}), flush=True)
+        sys.stdin.readline()
     closed = runtime.finish_shutdown(deadline=time.monotonic() + 3.0)
     print(json.dumps({"event": "closed", "state": closed}), flush=True)
 """
@@ -152,6 +156,15 @@ class RuntimeProcessLockTests(unittest.TestCase):
                 self.assertEqual(1, owner_result["connectAttempts"])
                 lock_path = lock / "audio-owner.lock"
                 inode_before = lock_path.stat().st_ino
+
+                owner.stdin.write("prepare\n")
+                owner.stdin.flush()
+                prepared_result = read_line(owner, 8.0)
+                self.assertEqual("prepared", prepared_result["event"])
+                prepared_state = prepared_result["state"]
+                self.assertEqual("CLOSING", prepared_state["phase"])
+                self.assertTrue(prepared_state["quiescent"])
+                self.assertTrue(prepared_state["ownerLockHeld"])
 
                 contender = launch(contender_cwd, False)
                 contender_result = read_line(contender, 8.0)
