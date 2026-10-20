@@ -30,6 +30,9 @@ on:
         - 'resources/default-settings/nginx.bootstrap-loopback.conf'
         - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
+        - 'src/jukebox/jukebox/contracts/playback_v1.py'
+        - 'test/contracts/test_playback_v1.py'
+        - 'test/contracts/fixtures/playback_v1.json'
         - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
   pull_request:
@@ -60,6 +63,9 @@ on:
         - 'resources/default-settings/nginx.bootstrap-loopback.conf'
         - 'resources/default-settings/nginx.library-loopback.conf'
         - 'src/webapp/**'
+        - 'src/jukebox/jukebox/contracts/playback_v1.py'
+        - 'test/contracts/test_playback_v1.py'
+        - 'test/contracts/fixtures/playback_v1.json'
         - 'test/contracts/fixtures/v1.json'
         - 'tests/design-preview/**'
 
@@ -98,9 +104,18 @@ jobs:
         env:
           PYTHONPATH: src/jukebox
 
+      - name: Test Python playback admission contracts
+        run: python -m unittest discover -s test/contracts -p test_playback_v1.py -v
+        env:
+          PYTHONPATH: src/jukebox
+
       - name: Test web app V1 contract seam
         working-directory: src/webapp
         run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/v1.test.js
+
+      - name: Test web app playback contract seam
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/playback-v1.test.js
 
       - name: Install Playwright test tool
         run: python -m pip install playwright==1.64.0
