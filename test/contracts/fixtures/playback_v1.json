@@ -1,0 +1,1653 @@
+{
+  "fixtureVersion": 1,
+  "cases": [
+    {
+      "name": "start command",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 0,
+        "entryId": "e1"
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 0,
+        "entryId": "e1"
+      }
+    },
+    {
+      "name": "stop command",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP"
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP"
+      }
+    },
+    {
+      "name": "stop extra queue field",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "queueId": "q1"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "accepted start",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "accepted stop",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": null
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": null
+        }
+      }
+    },
+    {
+      "name": "rejected capability",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "REJECTED",
+        "error": {
+          "code": "CAPABILITY_UNAVAILABLE",
+          "message": "Playback capability is unavailable.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "capability": "SPOTIFY_PLAYBACK"
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "REJECTED",
+        "error": {
+          "code": "CAPABILITY_UNAVAILABLE",
+          "message": "Playback capability is unavailable.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "capability": "SPOTIFY_PLAYBACK"
+          }
+        }
+      }
+    },
+    {
+      "name": "capability error",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "code": "CAPABILITY_UNAVAILABLE",
+        "message": "Playback capability is unavailable.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "details": {
+          "capability": "SPOTIFY_PLAYBACK"
+        }
+      },
+      "expected": {
+        "code": "CAPABILITY_UNAVAILABLE",
+        "message": "Playback capability is unavailable.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "details": {
+          "capability": "SPOTIFY_PLAYBACK"
+        }
+      }
+    },
+    {
+      "name": "invalid timestamp calendar",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2023-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.acceptedAt",
+          "reason": "invalid_timestamp"
+        }
+      }
+    },
+    {
+      "name": "admission error VALIDATION_ERROR",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "VALIDATION_ERROR",
+        "details": {
+          "field": "command.entryId",
+          "reason": "invalid_identifier"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "VALIDATION_ERROR",
+        "details": {
+          "field": "command.entryId",
+          "reason": "invalid_identifier"
+        }
+      }
+    },
+    {
+      "name": "admission error UNSUPPORTED_VERSION",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "UNSUPPORTED_VERSION",
+        "details": {
+          "supportedVersions": [
+            1
+          ]
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "UNSUPPORTED_VERSION",
+        "details": {
+          "supportedVersions": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "name": "admission error NOT_FOUND",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "NOT_FOUND",
+        "details": {
+          "objectType": "queue",
+          "objectId": "q1"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "NOT_FOUND",
+        "details": {
+          "objectType": "queue",
+          "objectId": "q1"
+        }
+      }
+    },
+    {
+      "name": "admission error REVISION_CONFLICT",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "REVISION_CONFLICT",
+        "details": {
+          "conflicts": [
+            {
+              "objectType": "queue",
+              "objectId": "q1",
+              "expectedRevision": 0,
+              "actualRevision": 1
+            }
+          ]
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "REVISION_CONFLICT",
+        "details": {
+          "conflicts": [
+            {
+              "objectType": "queue",
+              "objectId": "q1",
+              "expectedRevision": 0,
+              "actualRevision": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "admission error COMMAND_ID_REUSED",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "COMMAND_ID_REUSED",
+        "details": {
+          "commandId": "c1"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "COMMAND_ID_REUSED",
+        "details": {
+          "commandId": "c1"
+        }
+      }
+    },
+    {
+      "name": "admission error LIMIT_EXCEEDED",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "LIMIT_EXCEEDED",
+        "details": {
+          "field": "playback.intentSequence",
+          "limit": 9007199254740991
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "LIMIT_EXCEEDED",
+        "details": {
+          "field": "playback.intentSequence",
+          "limit": 9007199254740991
+        }
+      }
+    },
+    {
+      "name": "admission error REVISION_EXHAUSTED",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "REVISION_EXHAUSTED",
+        "details": {
+          "objectType": "queue",
+          "objectId": "q1"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "REVISION_EXHAUSTED",
+        "details": {
+          "objectType": "queue",
+          "objectId": "q1"
+        }
+      }
+    },
+    {
+      "name": "admission error STORE_BUSY",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": true,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "STORE_BUSY",
+        "details": {
+          "operation": "PLAYBACK_ADMIT"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": true,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "STORE_BUSY",
+        "details": {
+          "operation": "PLAYBACK_ADMIT"
+        }
+      }
+    },
+    {
+      "name": "admission error STORE_UNAVAILABLE",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": true,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "STORE_UNAVAILABLE",
+        "details": {
+          "operation": "PLAYBACK_ADMIT"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": true,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "STORE_UNAVAILABLE",
+        "details": {
+          "operation": "PLAYBACK_ADMIT"
+        }
+      }
+    },
+    {
+      "name": "admission error INTERNAL_ERROR",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "INTERNAL_ERROR",
+        "details": {
+          "diagnosticId": "d1"
+        }
+      },
+      "expected": {
+        "message": "Admission rejected.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "code": "INTERNAL_ERROR",
+        "details": {
+          "diagnosticId": "d1"
+        }
+      }
+    },
+    {
+      "name": "wrong version value",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 2,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 0,
+        "entryId": "e1"
+      },
+      "error": {
+        "code": "UNSUPPORTED_VERSION",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "supportedVersions": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "name": "boolean revision",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": true,
+        "entryId": "e1"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command.expectedQueueRevision",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "missing start entry id",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 0
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command.entryId",
+          "reason": "missing_field"
+        }
+      }
+    },
+    {
+      "name": "accepted result extra field",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        },
+        "extra": 1
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "zero sequence",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 0,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.intentSequence",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "stop selection object",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {}
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.selection",
+          "reason": "must_be_null"
+        }
+      }
+    },
+    {
+      "name": "spotify selection",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "SPOTIFY",
+                "uri": "spotify:track:0123456789ABCDEFGHIJKL"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "selection.entry.mediaRef.kind",
+          "reason": "local_media_required"
+        }
+      }
+    },
+    {
+      "name": "excluded runtime error",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "REJECTED",
+        "error": {
+          "code": "STOP_UNCONFIRMED",
+          "message": "x",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {}
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error.code",
+          "reason": "unknown_error_code"
+        }
+      }
+    },
+    {
+      "name": "fractional revision",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 1.5,
+        "entryId": "e1"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command.expectedQueueRevision",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "rejected stop",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "stop-rejected",
+        "action": "PLAYBACK_STOP",
+        "status": "REJECTED",
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "No queue was found.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "objectType": "queue",
+            "objectId": "q1"
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "stop-rejected",
+        "action": "PLAYBACK_STOP",
+        "status": "REJECTED",
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "No queue was found.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "objectType": "queue",
+            "objectId": "q1"
+          }
+        }
+      }
+    },
+    {
+      "name": "accepted maximum sequence and selected revision",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 9007199254740991,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 9007199254740991,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 9007199254740991,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 9007199254740991,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "sequence overflow",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 9007199254740992,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.intentSequence",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "boolean sequence",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": true,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.intentSequence",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "selected revision overflow",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 9007199254740992,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "selection.queueRevision",
+          "reason": "invalid_integer"
+        }
+      }
+    },
+    {
+      "name": "boolean contract version",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": true,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "queueId": "q1",
+        "expectedQueueRevision": 0,
+        "entryId": "e1"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "document.contractVersion",
+          "reason": "invalid_version_type"
+        }
+      }
+    },
+    {
+      "name": "unknown command action",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_PAUSE"
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command.action",
+          "reason": "unknown_action"
+        }
+      }
+    },
+    {
+      "name": "non-string result status",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "status": [],
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": null
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult.status",
+          "reason": "invalid_status"
+        }
+      }
+    },
+    {
+      "name": "stop extra expected revision",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "expectedQueueRevision": null
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "stop extra entry id",
+      "validator": "validate_playback_command",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd2",
+        "action": "PLAYBACK_STOP",
+        "entryId": null
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "command",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "accepted null result",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": null
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult.result",
+          "reason": "invalid_type"
+        }
+      }
+    },
+    {
+      "name": "rejected null error",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "c1",
+        "action": "PLAYBACK_START",
+        "status": "REJECTED",
+        "error": null
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error",
+          "reason": "invalid_type"
+        }
+      }
+    },
+    {
+      "name": "rejected opposite result arm",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "stop-rejected",
+        "action": "PLAYBACK_STOP",
+        "status": "REJECTED",
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "No queue was found.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "objectType": "queue",
+            "objectId": "q1"
+          }
+        },
+        "result": null
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "accepted admission body extra key",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          },
+          "extra": 1
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult.result",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "accepted admission body missing intent id",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "commandResult.result.intentId",
+          "reason": "missing_field"
+        }
+      }
+    },
+    {
+      "name": "start selection extra key",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            },
+            "extra": 1
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.selection",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "start selection missing entry",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2024-02-29T23:59:59.123Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.selection.entry",
+          "reason": "missing_field"
+        }
+      }
+    },
+    {
+      "name": "capability retryable numeric zero",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "code": "CAPABILITY_UNAVAILABLE",
+        "message": "Playback capability is unavailable.",
+        "retryable": 0,
+        "operation": "PLAYBACK_ADMIT",
+        "details": {
+          "capability": "SPOTIFY_PLAYBACK"
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error.retryable",
+          "reason": "retryability_mismatch"
+        }
+      }
+    },
+    {
+      "name": "capability details extra key",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "code": "CAPABILITY_UNAVAILABLE",
+        "message": "Playback capability is unavailable.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "details": {
+          "capability": "SPOTIFY_PLAYBACK",
+          "extra": 1
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error.details",
+          "reason": "unknown_field"
+        }
+      }
+    },
+    {
+      "name": "capability wrong value",
+      "validator": "validate_playback_admission_error",
+      "input": {
+        "code": "CAPABILITY_UNAVAILABLE",
+        "message": "Playback capability is unavailable.",
+        "retryable": false,
+        "operation": "PLAYBACK_ADMIT",
+        "details": {
+          "capability": "LOCAL_PLAYBACK"
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error.details.capability",
+          "reason": "invalid_capability"
+        }
+      }
+    },
+    {
+      "name": "playback rejects COMMAND_NOT_FOUND",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "old",
+        "action": "PLAYBACK_STOP",
+        "status": "REJECTED",
+        "error": {
+          "code": "COMMAND_NOT_FOUND",
+          "message": "Command missing.",
+          "retryable": false,
+          "operation": "PLAYBACK_ADMIT",
+          "details": {
+            "commandId": "c1"
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "error.code",
+          "reason": "unknown_error_code"
+        }
+      }
+    },
+    {
+      "name": "valid timestamp 0001-01-01",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "0001-01-01T00:00:00.000Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "0001-01-01T00:00:00.000Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "valid timestamp 9999-12-31",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "9999-12-31T23:59:59.999Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "9999-12-31T23:59:59.999Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "valid timestamp 2000-02-29",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2000-02-29T00:00:00.000Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "expected": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2000-02-29T00:00:00.000Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "invalid century leap day",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "1900-02-29T00:00:00.000Z",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.acceptedAt",
+          "reason": "invalid_timestamp"
+        }
+      }
+    },
+    {
+      "name": "timestamp offset",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2000-01-01T00:00:00.000+00:00",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.acceptedAt",
+          "reason": "invalid_timestamp"
+        }
+      }
+    },
+    {
+      "name": "timestamp trailing newline",
+      "validator": "validate_playback_command_result",
+      "input": {
+        "contractVersion": 1,
+        "commandId": "cmd1",
+        "action": "PLAYBACK_START",
+        "status": "ACCEPTED",
+        "result": {
+          "intentId": "i1",
+          "intentSequence": 1,
+          "acceptedAt": "2000-01-01T00:00:00.000Z\n",
+          "selection": {
+            "queueId": "q1",
+            "queueRevision": 1,
+            "entry": {
+              "entryId": "e1",
+              "sourceEntryId": "src1",
+              "mediaRef": {
+                "kind": "LOCAL",
+                "libraryId": "lib1"
+              },
+              "title": "Song",
+              "position": 0
+            }
+          }
+        }
+      },
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The supplied contract value is invalid.",
+        "retryable": false,
+        "operation": "CONTRACT_VALIDATION",
+        "details": {
+          "field": "result.acceptedAt",
+          "reason": "invalid_timestamp"
+        }
+      }
+    }
+  ]
+}
