@@ -4,11 +4,13 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 
 from components.playlists.store import PlaylistStore, StoreError
+from jukebox.contracts.v1 import ContractValidationError
 
 LOCAL = {"kind": "LOCAL", "libraryId": "test_media"}
 
@@ -17,8 +19,24 @@ def command(cid, action, **fields):
     return {"contractVersion": 1, "commandId": cid, "action": action, **fields}
 
 
-def admit_from_independent_store(db_path, request):
-    return PlaylistStore(db_path).admit_playback(request)
+def admit_from_independent_store(db_path, request, store=None):
+    if store is None:
+        store = PlaylistStore(db_path)
+    return store.admit_playback(request)
+
+
+def admit_with_busy_retry(db_path, request, retry_window=5.0, store=None):
+    deadline = time.monotonic() + retry_window
+    while True:
+        try:
+            return admit_from_independent_store(db_path, request, store)
+        except StoreError as exc:
+            if exc.error["code"] != "STORE_BUSY":
+                raise
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(0.01, remaining))
 
 
 class PlaybackStoreTests(unittest.TestCase):
@@ -57,9 +75,12 @@ class PlaybackStoreTests(unittest.TestCase):
 
     def test_concurrent_distinct_admissions_sequence_and_retry(self):
         requests = [command("stop_%d" % n, "PLAYBACK_STOP") for n in range(8)]
+        stores = [PlaylistStore(self.path) for _ in requests]
         with ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(
-                lambda request: admit_from_independent_store(self.path, request), requests,
+                lambda pair: admit_with_busy_retry(
+                    self.path, pair[1], store=pair[0],
+                ), zip(stores, requests),
             ))
         self.assertTrue(all(r["status"] == "ACCEPTED" for r in results))
         ordered_sequences = [
@@ -74,9 +95,12 @@ class PlaybackStoreTests(unittest.TestCase):
 
     def test_same_id_race_and_command_collision(self):
         request = command("same_id", "PLAYBACK_STOP")
+        stores = [PlaylistStore(self.path), PlaylistStore(self.path)]
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(
-                lambda item: admit_from_independent_store(self.path, item), [request, request],
+                lambda pair: admit_with_busy_retry(
+                    self.path, pair[1], store=pair[0],
+                ), zip(stores, [request, request]),
             ))
         self.assertEqual(results[0], results[1])
         self.assertEqual(1, len(self.intent_rows()))
@@ -88,34 +112,79 @@ class PlaybackStoreTests(unittest.TestCase):
     def test_different_requests_race_for_one_command_binding(self):
         queue = self.queue()
         requests = [command("race_id", "PLAYBACK_STOP"), self.start("race_id", queue, 0)]
+        stores = [PlaylistStore(self.path) for _ in requests]
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(
-                lambda request: admit_from_independent_store(self.path, request), requests,
+                lambda pair: admit_with_busy_retry(
+                    self.path, pair[1], store=pair[0],
+                ), zip(stores, requests),
             ))
         self.assertEqual(["ACCEPTED", "REJECTED"], sorted(r["status"] for r in results))
         rejected = next(r for r in results if r["status"] == "REJECTED")
         self.assertEqual("COMMAND_ID_REUSED", rejected["error"]["code"])
         self.assertEqual(1, len(self.intent_rows()))
 
-    def test_busy_does_not_bind_and_same_id_retry_succeeds(self):
+    def test_busy_lock_retry_succeeds_without_binding_before_release(self):
         request = command("busy_retry", "PLAYBACK_STOP")
         blocker = sqlite3.connect(self.path, timeout=1, isolation_level=None)
         blocker.execute("BEGIN IMMEDIATE")
-        errors = []
         try:
-            try:
-                self.store.admit_playback(request)
-            except StoreError as exc:
-                errors.append(exc)
-            time.sleep(0.2)
+            with self.assertRaises(StoreError) as caught:
+                admit_with_busy_retry(self.path, request, retry_window=0.25)
         finally:
             blocker.rollback()
             blocker.close()
-        self.assertEqual(1, len(errors))
-        self.assertEqual("STORE_BUSY", errors[0].error["code"])
+        self.assertEqual("STORE_BUSY", caught.exception.error["code"])
+        self.assertTrue(caught.exception.error["retryable"])
         self.assertEqual([], self.intent_rows())
-        accepted = self.store.admit_playback(request)
+        with closing(sqlite3.connect(self.path)) as conn:
+            self.assertIsNone(conn.execute(
+                "SELECT 1 FROM command_log WHERE command_id='busy_retry'",
+            ).fetchone())
+        accepted = admit_with_busy_retry(self.path, request)
         self.assertEqual("ACCEPTED", accepted["status"])
+
+    def test_busy_retry_deadline_uses_controlled_clock(self):
+        request = command("deadline", "PLAYBACK_STOP")
+        busy = StoreError({
+            "code": "STORE_BUSY", "message": "Busy", "retryable": True,
+            "operation": "PLAYBACK_ADMIT", "details": {"operation": "PLAYBACK_ADMIT"},
+        })
+        with patch(__name__ + ".admit_from_independent_store", side_effect=[busy, busy]) as admit:
+            with patch("time.monotonic", side_effect=[0.0, 0.5, 1.0]):
+                with patch("time.sleep") as sleep:
+                    with self.assertRaises(StoreError) as caught:
+                        admit_with_busy_retry(
+                            self.path, request, retry_window=1.0,
+                        )
+        self.assertIs(busy, caught.exception)
+        self.assertEqual(2, admit.call_count)
+        self.assertEqual(
+            [((self.path, request, None), {}), ((self.path, request, None), {})],
+            admit.call_args_list,
+        )
+        sleep.assert_called_once_with(0.01)
+
+    def test_nonbusy_errors_propagate_without_retry_or_sleep(self):
+        unavailable = StoreError({
+            "code": "STORE_UNAVAILABLE", "message": "Unavailable", "retryable": True,
+            "operation": "PLAYBACK_ADMIT", "details": {"operation": "PLAYBACK_ADMIT"},
+        })
+        validation = ContractValidationError("command.action", "unknown_action")
+        for error in (unavailable, validation):
+            with self.subTest(error=type(error).__name__):
+                with patch(
+                    __name__ + ".admit_from_independent_store", side_effect=error,
+                ) as admit:
+                    with patch("time.sleep") as sleep:
+                        with self.assertRaises(type(error)) as caught:
+                            admit_with_busy_retry(
+                                self.path, command("unavailable", "PLAYBACK_STOP"),
+                                retry_window=10,
+                            )
+                self.assertIs(error, caught.exception)
+                admit.assert_called_once()
+                sleep.assert_not_called()
 
     def test_start_snapshot_selection_and_domain_rejections(self):
         queue = self.queue()
@@ -454,9 +523,12 @@ class PlaybackStoreTests(unittest.TestCase):
             self.start("mixed_start_b", queues[1], 0),
             command("mixed_stop_b", "PLAYBACK_STOP"),
         ]
+        stores = [PlaylistStore(self.path) for _ in requests]
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(
-                lambda request: admit_from_independent_store(self.path, request), requests,
+                lambda pair: admit_with_busy_retry(
+                    self.path, pair[1], store=pair[0],
+                ), zip(stores, requests),
             ))
         self.assertTrue(all(item["status"] == "ACCEPTED" for item in results))
         self.assertEqual([1, 2, 3, 4], sorted(item["result"]["intentSequence"] for item in results))
