@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 from uuid import uuid4
+from datetime import datetime, timezone
 
 from jukebox.contracts.v1 import (
     ContractValidationError,
@@ -14,7 +15,9 @@ from jukebox.contracts.v1 import (
     validate_identifier,
     validate_queue_snapshot,
     validate_playlist_snapshot,
+    validate_queue_entry,
 )
+from jukebox.contracts.playback_v1 import validate_playback_command, validate_playback_command_result
 
 
 class StoreError(Exception):
@@ -64,7 +67,7 @@ class PlaylistStore:
             if previous is not None:
                 if previous[0] == request_json:
                     conn.commit()
-                    return self._decode_result(previous[1])
+                    return self._decode_stored(previous[0], previous[1], parsed["commandId"])
                 result = self._rejected(
                     parsed,
                     "COMMAND_ID_REUSED",
@@ -185,22 +188,139 @@ class PlaylistStore:
         conn = self._connect("COMMAND_GET")
         try:
             row = conn.execute(
-                "SELECT result_json FROM command_log WHERE command_id = ?", (command_id,)
+                "SELECT request_json, result_json FROM command_log WHERE command_id = ?", (command_id,)
             ).fetchone()
             if row is None:
                 raise _store_error(
                     "COMMAND_NOT_FOUND", "COMMAND_GET", {"commandId": command_id},
                     "The requested command result was not found.",
                 )
-            if row[0] is None:
+            if row[0] is None or row[1] is None:
                 raise _store_error("STORE_UNAVAILABLE", "COMMAND_GET")
-            return self._decode_result(row[0])
+            return self._decode_stored(row[0], row[1], command_id)
         except sqlite3.OperationalError as exc:
             raise self._database_error(exc, "COMMAND_GET") from None
         except sqlite3.DatabaseError:
             raise _store_error("STORE_UNAVAILABLE", "COMMAND_GET") from None
         finally:
             conn.close()
+
+    def admit_playback(self, command: Dict[str, Any]) -> Dict[str, Any]:
+        parsed = validate_playback_command(command)
+        request_json = _canonical_json(parsed)
+        conn = self._connect("PLAYBACK_ADMIT")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            previous = conn.execute(
+                "SELECT request_json, result_json FROM command_log WHERE command_id = ?",
+                (parsed["commandId"],),
+            ).fetchone()
+            if previous is not None:
+                if previous[0] == request_json:
+                    result = self._decode_stored(previous[0], previous[1], parsed["commandId"])
+                    conn.commit()
+                    return result
+                result = self._playback_rejected(parsed, "COMMAND_ID_REUSED",
+                    {"commandId": parsed["commandId"]},
+                    "This commandId is already bound to a different request.",
+                )
+                conn.commit()
+                return result
+            conn.execute("INSERT INTO command_log (command_id, request_json, result_json) VALUES (?, ?, NULL)",
+                         (parsed["commandId"], request_json))
+            try:
+                selection = self._admit_start_selection(conn, parsed) if parsed["action"] == "PLAYBACK_START" else None
+                sequence = conn.execute("SELECT COALESCE(MAX(intent_sequence), 0) FROM playback_intents").fetchone()[0]
+                if sequence >= 9007199254740991:
+                    raise _DomainRejection(
+                        "LIMIT_EXCEEDED",
+                        {"field": "playback.intentSequence", "limit": 9007199254740991},
+                        "The playback intent sequence limit has been reached.",
+                    )
+                if selection is not None:
+                    conn.execute("UPDATE queues SET current_entry_id=?,revision=? WHERE queue_id=?",
+                        (selection["entry"]["entryId"], selection["queueRevision"], selection["queueId"]))
+                sequence += 1
+                intent_id = _new_id("pi")
+                stamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                result = validate_playback_command_result({
+                    "contractVersion": 1, "commandId": parsed["commandId"], "action": parsed["action"],
+                    "status": "ACCEPTED", "result": {"intentId": intent_id, "intentSequence": sequence,
+                    "acceptedAt": stamp, "selection": selection}})
+                self._write_playback_result(conn, parsed["commandId"], result)
+                conn.execute(
+                    "INSERT INTO playback_intents "
+                    "(command_id,intent_id,intent_sequence,state,queue_id,entry_id) "
+                    "VALUES (?,?,?,'PENDING',?,?)",
+                    (parsed["commandId"], intent_id, sequence, selection["queueId"] if selection else None,
+                     selection["entry"]["entryId"] if selection else None))
+            except _DomainRejection as rejection:
+                result = self._playback_rejected(parsed, rejection.code, rejection.details, rejection.message)
+                self._write_playback_result(conn, parsed["commandId"], result)
+            conn.commit()
+            return result
+        except sqlite3.OperationalError as exc:
+            _rollback_quietly(conn)
+            raise self._database_error(exc, "PLAYBACK_ADMIT") from None
+        except sqlite3.DatabaseError:
+            _rollback_quietly(conn)
+            raise _store_error("STORE_UNAVAILABLE", "PLAYBACK_ADMIT") from None
+        except Exception:
+            _rollback_quietly(conn)
+            raise
+        finally:
+            conn.close()
+
+    def _admit_start_selection(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
+        row = self._queue_header(conn, command["queueId"])
+        if row is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queue", "objectId": command["queueId"]},
+                "The requested queue was not found.",
+            )
+        if row[0] != command["expectedQueueRevision"]:
+            raise _DomainRejection(
+                "REVISION_CONFLICT", {"conflicts": [self._revision_conflict(
+                    "queue", command["queueId"], command["expectedQueueRevision"], row[0])]},
+                "The queue changed since it was read.",
+            )
+        entries = conn.execute(
+            "SELECT entry_id,source_entry_id,media_ref_json,title,position FROM queue_entries "
+            "WHERE queue_id=? ORDER BY position", (command["queueId"],),
+        ).fetchall()
+        found = None
+        try:
+            for expected_position, stored in enumerate(entries):
+                decoded_media = json.loads(stored[2])
+                normalized = validate_queue_entry({
+                    "entryId": stored[0], "sourceEntryId": stored[1],
+                    "mediaRef": decoded_media, "title": stored[3], "position": stored[4],
+                }, expected_position=expected_position)
+                if stored[0] == command["entryId"]:
+                    found = normalized
+        except Exception:
+            raise _store_error("STORE_UNAVAILABLE", "PLAYBACK_ADMIT") from None
+        if found is None:
+            raise _DomainRejection(
+                "NOT_FOUND", {"objectType": "queueEntry", "objectId": command["entryId"]},
+                "The requested queue entry was not found.",
+            )
+        media = found["mediaRef"]
+        if media["kind"] != "LOCAL":
+            raise _DomainRejection(
+                "CAPABILITY_UNAVAILABLE", {"capability": "SPOTIFY_PLAYBACK"},
+                "The selected media source is not available for local playback.",
+            )
+        revision = row[0]
+        if row[3] != command["entryId"]:
+            if revision >= 9007199254740991:
+                raise _DomainRejection(
+                    "REVISION_EXHAUSTED",
+                    {"objectType": "queue", "objectId": command["queueId"]},
+                    "The queue revision limit has been reached.",
+                )
+            revision += 1
+        return {"queueId": command["queueId"], "queueRevision": revision, "entry": found}
 
     def list_playlists(self, limit: int = 50, cursor: Optional[str] = None) -> Dict[str, Any]:
         if type(limit) is not int or not 1 <= limit <= 200:
@@ -407,9 +527,15 @@ class PlaylistStore:
                 "REVISION_CONFLICT", {"conflicts": conflicts},
                 "One or more objects changed since they were read.",
             )
-        if queue[3] is not None:
+        pinned = self._oldest_pin(conn, command["queueId"])
+        if pinned is not None:
             raise _DomainRejection(
                 "ACTIVE_ENTRY_REQUIRES_CONTROLLER",
+                {"queueId": command["queueId"], "currentEntryId": pinned},
+                "An admitted playback entry must be resolved by the controller before loading a playlist.",
+            )
+        if queue[3] is not None:
+            raise _DomainRejection("ACTIVE_ENTRY_REQUIRES_CONTROLLER",
                 {"queueId": command["queueId"], "currentEntryId": queue[3]},
                 "The active queue entry must be cleared by the controller before loading a playlist.",
             )
@@ -454,10 +580,12 @@ class PlaylistStore:
     def _queue_remove(self, conn: sqlite3.Connection, command: Dict[str, Any]) -> Dict[str, Any]:
         queue = self._queue_for_edit(conn, command)
         entry_id = command["entryId"]
-        if queue[3] == entry_id:
+        pinned = self._oldest_pin(conn, command["queueId"], entry_id)
+        if pinned is not None or queue[3] == entry_id:
+            protected = pinned or queue[3]
             raise _DomainRejection(
                 "ACTIVE_ENTRY_REQUIRES_CONTROLLER",
-                {"queueId": command["queueId"], "currentEntryId": queue[3]},
+                {"queueId": command["queueId"], "currentEntryId": protected},
                 "The active queue entry must be cleared by the controller before removal.",
             )
         exists = conn.execute(
@@ -757,6 +885,81 @@ class PlaylistStore:
         except (ValueError, TypeError):
             raise _store_error("STORE_UNAVAILABLE", "COMMAND_GET") from None
 
+    def _decode_stored(self, request_value: str, result_value: str, command_id: str) -> Dict[str, Any]:
+        try:
+            request = json.loads(request_value)
+            if not isinstance(request, dict) or request.get("commandId") != command_id:
+                raise ValueError()
+            action = request.get("action")
+            if action in {"PLAYBACK_START", "PLAYBACK_STOP"}:
+                parsed_request = validate_playback_command(request)
+                result = validate_playback_command_result(json.loads(result_value))
+            else:
+                parsed_request = validate_command(request)
+                result = validate_command_result(json.loads(result_value))
+            if result["commandId"] != command_id or result["action"] != parsed_request["action"]:
+                raise ValueError()
+            if action in {"PLAYBACK_START", "PLAYBACK_STOP"}:
+                self._validate_intent_link(command_id, result)
+            else:
+                self._validate_no_intent_link(command_id)
+            return result
+        except Exception:
+            raise _store_error("STORE_UNAVAILABLE", "COMMAND_GET") from None
+
+    def _validate_intent_link(self, command_id: str, result: Dict[str, Any]) -> None:
+        conn = self._connect("COMMAND_GET")
+        try:
+            row = conn.execute(
+                "SELECT intent_id,intent_sequence,state,queue_id,entry_id "
+                "FROM playback_intents WHERE command_id=?", (command_id,),
+            ).fetchone()
+            if result["status"] == "REJECTED":
+                if row is not None:
+                    raise ValueError()
+                return
+            if row is None:
+                raise ValueError()
+            body = result["result"]
+            selection = body["selection"]
+            expected = (
+                body["intentId"], body["intentSequence"], "PENDING",
+                selection["queueId"] if selection else None,
+                selection["entry"]["entryId"] if selection else None,
+            )
+            if row != expected:
+                raise ValueError()
+        finally:
+            conn.close()
+
+    def _validate_no_intent_link(self, command_id: str) -> None:
+        conn = self._connect("COMMAND_GET")
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM playback_intents WHERE command_id=?", (command_id,),
+            ).fetchone()
+            if row is not None:
+                raise ValueError()
+        finally:
+            conn.close()
+
+    def _oldest_pin(self, conn: sqlite3.Connection, queue_id: str, entry_id: Optional[str] = None) -> Optional[str]:
+        sql = "SELECT entry_id FROM playback_intents WHERE queue_id=? AND state='PENDING'"
+        args = [queue_id]
+        if entry_id is not None:
+            sql += " AND entry_id=?"
+            args.append(entry_id)
+        sql += " ORDER BY intent_sequence LIMIT 1"
+        row = conn.execute(sql, args).fetchone()
+        return row[0] if row else None
+
+    def _write_playback_result(self, conn: sqlite3.Connection, command_id: str, result: Dict[str, Any]) -> None:
+        validated = validate_playback_command_result(result)
+        conn.execute(
+            "UPDATE command_log SET result_json=? WHERE command_id=?",
+            (_canonical_json(validated), command_id),
+        )
+
     def _connect(self, operation: str) -> sqlite3.Connection:
         try:
             conn = sqlite3.connect(self._db_path, timeout=0.15, isolation_level=None)
@@ -818,6 +1021,15 @@ class PlaylistStore:
                     position INTEGER NOT NULL CHECK (position >= 0),
                     UNIQUE (queue_id, position)
                 );
+                CREATE TABLE IF NOT EXISTS playback_intents (
+                    command_id TEXT PRIMARY KEY REFERENCES command_log(command_id),
+                    intent_id TEXT NOT NULL UNIQUE,
+                    intent_sequence INTEGER NOT NULL UNIQUE CHECK(intent_sequence BETWEEN 1 AND 9007199254740991),
+                    state TEXT NOT NULL CHECK(state='PENDING'),
+                    queue_id TEXT,
+                    entry_id TEXT,
+                    CHECK ((queue_id IS NULL) = (entry_id IS NULL))
+                );
             """)
         except sqlite3.DatabaseError:
             raise _store_error("STORE_UNAVAILABLE", "STORE_INITIALIZE") from None
@@ -841,6 +1053,15 @@ class PlaylistStore:
             "contractVersion": 1, "commandId": command["commandId"],
             "action": command["action"], "status": "REJECTED",
             "error": _error(code, command["action"], details, message),
+        })
+
+    def _playback_rejected(self, command: Dict[str, Any], code: str,
+                           details: Dict[str, Any], message: str) -> Dict[str, Any]:
+        error = {"code": code, "message": message, "retryable": code == "STORE_BUSY",
+                 "operation": "PLAYBACK_ADMIT", "details": details}
+        return validate_playback_command_result({
+            "contractVersion": 1, "commandId": command["commandId"],
+            "action": command["action"], "status": "REJECTED", "error": error,
         })
 
 
