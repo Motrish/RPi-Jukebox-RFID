@@ -12,7 +12,14 @@ from .local_playback_service import LocalPlaybackService
 
 
 class DurableDispatch:
-    """Admit one command and advance its local service synchronously."""
+    """Admit a command and advance playback once.
+
+    ``admission.action`` is the requested command; ``operation`` is what ran.
+    They can differ after a provider crash, when the step performs cleanup STOP.
+    A successful ``operation=None`` means this step did no work because it was
+    already satisfied. For executed steps exactly one of ``gate``/``failure`` is
+    set; rejected or unknown admissions set neither.
+    """
 
     def __init__(self, *, store, provider, boot_id, monotonic=None):
         self._store = store
@@ -36,26 +43,29 @@ class DurableDispatch:
                 if _canonical(admitted) == _canonical(previous_admission):
                     return previous_result
             if admitted.get("status") != "ACCEPTED":
-                return admitted
+                return _wrapper(admitted)
             action = admitted["action"]
+            before = self._service.snapshot()
             if action == "PLAYBACK_START":
                 entry = admitted["result"]["selection"]["entry"]
                 # commandId→executionId correlation is deferred to C4b.
-                self._service.request_start(entry["entryId"], entry["mediaRef"])
+                intent_id = self._service.request_start(entry["entryId"], entry["mediaRef"])
             elif action == "PLAYBACK_STOP":
-                self._service.request_stop()
+                intent_id = self._service.request_stop()
             else:
-                return admitted
+                return _wrapper(admitted)
+            pre_run = self._service.snapshot()
             # Propagates provider failure verbatim; C4b will publish a contract-shaped result.
             state = self._service.run_once(deadline=deadline)
-            if state.get("lastFailure") is not None:
-                result = {"admission": admitted, "playback": state,
-                          "failure": state["lastFailure"]}
+            operation, work_ran = _execution_outcome(before, pre_run, state, intent_id)
+            failure = state.get("lastFailure") if work_ran else None
+            if failure is not None:
+                result = _wrapper(admitted, state, operation,
+                                  failure=failure)
             else:
-                result = {"admission": admitted, "playback": state,
-                          "gate": state["gate"]}
+                result = _wrapper(admitted, state, operation, gate=state["gate"])
             if type(command_id) is str:
-                self._completed[command_id] = (admitted, result)
+                self._completed[command_id] = (dict(admitted), result)
             return result
         finally:
             self._lock.release()
@@ -82,3 +92,43 @@ def _finite(value):
 
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _wrapper(admission, playback=None, operation=None, *, gate=None, failure=None):
+    return {"admission": admission, "playback": playback, "operation": operation,
+            "gate": gate, "failure": failure}
+
+
+def _execution_outcome(before, pre_run, after, intent_id):
+    owner = pre_run["gate"]["owner"]
+    after_owner = after["gate"]["owner"]
+    owner_trip = None
+    if before["gate"]["owner"] == owner:
+        owner_trip = ("START" if owner is None and after_owner is not None else
+                      "STOP" if owner is not None and after_owner is None else None)
+    pending = pre_run.get("pending")
+    pending_matches = (pending is not None and pending.get("intentId") == intent_id)
+    start_pending_consumed = (pending_matches and pending.get("operation") == "START"
+                              and after.get("pending") is None)
+    start_work = owner_trip == "START" or start_pending_consumed
+    stop_work = (
+        owner is not None
+        and (pre_run["gate"]["cleanupRequired"]
+             or (pending_matches and pending.get("operation") == "STOP"))
+    )
+    # request_start disables retry after STOP_UNCONFIRMED; the service's earlier
+    # failed-stop latch then returns without attempting cleanup, despite owner state.
+    pre_failure = pre_run.get("lastFailure")
+    latched_start = (pending_matches and pending.get("operation") == "START"
+                     and pre_failure is not None
+                     and pre_failure.get("operation") == "STOP"
+                     and pre_failure.get("code") == "STOP_UNCONFIRMED")
+    if latched_start:
+        stop_work = False
+    work_ran = bool(start_work or stop_work)
+    operation = owner_trip
+    if operation is None and work_ran:
+        failure = after.get("lastFailure")
+        if failure is not None:
+            operation = failure.get("operation")
+    return operation, work_ran
