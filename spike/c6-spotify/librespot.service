@@ -1,0 +1,26 @@
+[Unit]
+Description=Librespot Spotify Connect
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+EnvironmentFile=-/etc/default/librespot
+ExecStart=/usr/local/bin/librespot \
+  --name "${LIBRESPOT_NAME:-Phoniebox}" \
+  --device "${LIBRESPOT_DEVICE:-default}" \
+  --backend pipewire \
+  --cache /var/cache/librespot \
+  --enable-volume-normalisation \
+  --linear-volume \
+  --initial-volume "${LIBRESPOT_INITIAL_VOLUME:-100}" \
+  ${LIBRESPOT_EXTRA_ARGS}
+Restart=on-failure
+RestartSec=5
+
+# Token refresh handled by librespot internally via stored credentials
+# If using OAuth, ensure client_id and client_secret are set in config
+
+[Install]
+WantedBy=multi-user.target
