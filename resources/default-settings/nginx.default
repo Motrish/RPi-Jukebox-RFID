@@ -1,0 +1,44 @@
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+
+	root %%INSTALLATION_PATH%%/src/webapp/build;
+
+	index index.html index.htm;
+
+	server_name _;
+
+	location / {
+ 		location = /index.html {
+ 			 error_page 404 = @buildwebui;
+ 			 log_not_found off;
+ 		}
+ 		location = / {
+		         error_page 404 = @buildwebui;
+			 log_not_found off;
+ 		}
+		try_files $uri $uri/ =404;
+	}
+
+	location /logs {
+			root %%INSTALLATION_PATH%%/shared;
+
+			autoindex on;
+			autoindex_exact_size off;
+			autoindex_localtime on;
+
+			default_type text/plain;
+	}
+
+	location @buildwebui {
+ 		 root %%INSTALLATION_PATH%%/resources/html;
+		 try_files /runbuildui.html =404;
+ 		 internal;
+ 	}
+
+    error_page 404 = /404.html;
+    location /404.html {
+        root %%INSTALLATION_PATH%%/resources/html;
+        internal;
+    }
+}

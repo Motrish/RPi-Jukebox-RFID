@@ -1,0 +1,122 @@
+{
+  "valid_media_refs": [
+    {"kind": "LOCAL", "libraryId": "lib_synthetic_001"},
+    {"kind": "SPOTIFY", "uri": "spotify:track:0123456789ABCDEFGHIJKL"}
+  ],
+  "valid_playlist": {
+    "contractVersion": 1,
+    "playlistId": "pl_synthetic_001",
+    "name": "Synthetic mixed playlist",
+    "revision": 3,
+    "entries": [
+      {"entryId": "pe_synthetic_001", "mediaRef": {"kind": "LOCAL", "libraryId": "lib_synthetic_001"}, "title": "Local story", "position": 0},
+      {"entryId": "pe_synthetic_002", "mediaRef": {"kind": "SPOTIFY", "uri": "spotify:track:0123456789ABCDEFGHIJKL"}, "title": "Spotify track", "position": 1},
+      {"entryId": "pe_synthetic_003", "mediaRef": {"kind": "LOCAL", "libraryId": "lib_synthetic_001"}, "title": "Local story again", "position": 2}
+    ]
+  },
+  "valid_queue": {
+    "contractVersion": 1,
+    "queueId": "q_synthetic_001",
+    "revision": 7,
+    "sourcePlaylistId": "pl_synthetic_001",
+    "sourcePlaylistRevision": 3,
+    "entries": [
+      {"entryId": "qe_synthetic_001", "sourceEntryId": "pe_synthetic_001", "mediaRef": {"kind": "LOCAL", "libraryId": "lib_synthetic_001"}, "title": "Local story", "position": 0},
+      {"entryId": "qe_synthetic_002", "sourceEntryId": "pe_synthetic_002", "mediaRef": {"kind": "SPOTIFY", "uri": "spotify:track:0123456789ABCDEFGHIJKL"}, "title": "Spotify track", "position": 1},
+      {"entryId": "qe_synthetic_003", "sourceEntryId": "pe_synthetic_003", "mediaRef": {"kind": "LOCAL", "libraryId": "lib_synthetic_001"}, "title": "Local story again", "position": 2}
+    ],
+    "currentEntryId": "qe_synthetic_002",
+    "repeatMode": "ALL",
+    "shuffleMode": "OFF"
+  },
+  "valid_empty_queue": {
+    "contractVersion": 1,
+    "queueId": "q_synthetic_empty",
+    "revision": 0,
+    "sourcePlaylistId": null,
+    "sourcePlaylistRevision": null,
+    "entries": [],
+    "currentEntryId": null,
+    "repeatMode": "OFF",
+    "shuffleMode": "OFF"
+  },
+  "js_conformance": {
+    "domain": {
+      "integerMinimum": 0,
+      "integerMaximum": 9007199254740991,
+      "maxEntries": 10000,
+      "sharedSafeIntegers": [0, 1, 9007199254740991],
+      "rawNumberCases": [
+        {
+          "name": "decimal-one-revision",
+          "classification": "RAW_FLOAT_LEXEME_LOST_AFTER_JSON_PARSE",
+          "validator": "validate_playlist_snapshot",
+          "path": ["revision"],
+          "rawJson": "1.0",
+          "jsParsedNumber": 1,
+          "jsOutcome": "ACCEPT_CANONICAL_SAFE_INTEGER",
+          "pythonOutcome": "VALIDATION_ERROR"
+        },
+        {
+          "name": "exponent-one-revision",
+          "classification": "RAW_FLOAT_LEXEME_LOST_AFTER_JSON_PARSE",
+          "validator": "validate_playlist_snapshot",
+          "path": ["revision"],
+          "rawJson": "1e0",
+          "jsParsedNumber": 1,
+          "jsOutcome": "ACCEPT_CANONICAL_SAFE_INTEGER",
+          "pythonOutcome": "VALIDATION_ERROR"
+        },
+        {
+          "name": "decimal-one-version",
+          "classification": "RAW_FLOAT_LEXEME_LOST_AFTER_JSON_PARSE",
+          "validator": "validate_playlist_snapshot",
+          "path": ["contractVersion"],
+          "rawJson": "1.0",
+          "jsParsedNumber": 1,
+          "jsOutcome": "ACCEPT_CANONICAL_SAFE_INTEGER",
+          "pythonOutcome": "VALIDATION_ERROR"
+        },
+        {
+          "name": "negative-zero-decimal-revision",
+          "classification": "RAW_FLOAT_LEXEME_LOST_AFTER_JSON_PARSE",
+          "validator": "validate_playlist_snapshot",
+          "path": ["revision"],
+          "rawJson": "-0.0",
+          "jsParsedNumber": -0,
+          "jsOutcome": "ACCEPT_CANONICAL_SAFE_INTEGER",
+          "pythonOutcome": "VALIDATION_ERROR"
+        },
+        {
+          "name": "unsafe-version-integer",
+          "classification": "OUTSIDE_SAFE_INTEGER_DOMAIN",
+          "validator": "validate_playlist_snapshot",
+          "path": ["contractVersion"],
+          "rawJson": "9007199254740992",
+          "jsParsedNumber": 9007199254740992,
+          "jsOutcome": "EXPLICIT_REJECTION_NO_ERROR_PARITY_CLAIM",
+          "pythonOutcome": "UNSUPPORTED_VERSION"
+        },
+        {
+          "name": "unsafe-supported-version-integer",
+          "classification": "OUTSIDE_SAFE_INTEGER_DOMAIN",
+          "validator": "validate_error",
+          "path": ["details", "supportedVersions", 0],
+          "rawJson": "9007199254740992",
+          "jsParsedNumber": 9007199254740992,
+          "jsOutcome": "EXPLICIT_REJECTION_NO_ERROR_PARITY_CLAIM",
+          "pythonOutcome": "ACCEPT"
+        }
+      ]
+    },
+    "unicode": {
+      "astralCharacter": "🎧",
+      "pythonWhitespaceCases": [
+        {"name": "next-line", "value": "\u0085", "pythonStripIsEmpty": true, "jsClassification": "PYTHON_WHITESPACE"},
+        {"name": "file-separator", "value": "\u001c", "pythonStripIsEmpty": true, "jsClassification": "PYTHON_WHITESPACE"},
+        {"name": "byte-order-mark", "value": "\ufeff", "pythonStripIsEmpty": false, "jsClassification": "PYTHON_NON_WHITESPACE"}
+      ]
+    },
+    "prototypePropertyNames": ["__proto__", "constructor", "toString"]
+  }
+}

@@ -1,38 +1,43 @@
-# Test trigger
-# Library dependencies for the python code.  You need to install these with
-# `sudo python3 -m pip install --upgrade --force-reinstall -r requirements.txt` before you can run this.
+# Common python packages
+# You need to install these with `python -m pip install --no-cache-dir -r requirements.txt`
 
-#### ESSENTIAL LIBRARIES FOR MAIN FUNCTIONALITY ####
+setuptools
+wheel
 
-# related libraries.
+# Note:
+# sudo apt install libasound2-dev required on some machines
+
+# Jukebox Core
+# For USB inputs (reader, buttons) and bluetooth buttons
 evdev
-git+https://github.com/lthiery/SPI-Py.git#egg=spi-py
-yt-dlp
-pyserial
+mutagen
+pyalsaaudio
+pulsectl
+python-mpd2==3.1.1
+ruamel.yaml
+# For playlistgenerator
+requests
+# For the publisher event reactor loop:
+tornado
+
+# RPi's GPIO packages:
 # use shim to keep current RPi.GPIO behavior also under Bookworm - see https://github.com/MiczFlor/RPi-Jukebox-RFID/issues/2313
 rpi-lgpio --no-binary=lgpio
+gpiozero
 
-# Type checking for python
-# typing
+# PyZMQ is a special case:
+# On the PI, it needs to be compiled with special options to enable Websocket support
+# On regular Linux PCs, Websocket is enabled in the Python package
+# pyzmq
 
-#### TESTING-RELATED PACKAGES ####
-
-# Checks style, syntax, and other useful errors
-# pylint==1.6.5
-
-# We'll use pytest to run our tests; this isn't really necessary to run the code, but it is to run
-# the tests.  With this here, you can run the tests with `py.test` from the base directory.
+# Code quality
+flake8>=4.0.0
 pytest
-
-# Makes it so that pytest can handle the code structure we use, with src/main/python, and src/test.
-pytest-pythonpath
-
-# Allows generation of coverage reports with pytest.
 pytest-cov
+mock
 
-# Allows marking tests as flaky, to be rerun if they fail
-# flaky
+# API docs generation
+pydoc-markdown
 
-# Allows codecov to generate coverage reports
-coverage
-# codecov
+# MQTT
+paho-mqtt

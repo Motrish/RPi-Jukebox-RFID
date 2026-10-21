@@ -1,0 +1,237 @@
+name: Test Build Web App v3
+
+on:
+  schedule:
+    # run at 18:00 every sunday
+    - cron: '0 18 * * 0'
+  push:
+    branches:
+        - 'future3/**'
+    paths:
+        - '.github/workflows/test_build_webapp_v3.yml'
+        - '.github/actions/build-webapp/**'
+        - 'tools/web_bundle.py'
+        - 'test/web_bundle/test_web_bundle.py'
+        - 'installation/bootstrap-web.sh'
+        - 'installation/websetup/launch.py'
+        - 'installation/websetup/bundle.py'
+        - 'installation/websetup/server.py'
+        - 'installation/websetup/preflight.py'
+        - 'installation/websetup/jobs.py'
+        - 'installation/websetup/worker.py'
+        - 'installation/websetup/index.html'
+        - 'test/websetup/test_launch.py'
+        - 'test/websetup/test_bundle.py'
+        - 'test/websetup/test_preflight.py'
+        - 'test/websetup/test_jobs.py'
+        - 'test/websetup/test_worker.py'
+        - 'test/websetup/test_worker_contract.py'
+        - 'test/websetup/test_job_contract.py'
+        - 'resources/default-settings/nginx.bootstrap-loopback.conf'
+        - 'resources/default-settings/nginx.library-loopback.conf'
+        - 'src/webapp/**'
+        - 'src/jukebox/jukebox/contracts/playback_v1.py'
+        - 'test/contracts/test_playback_v1.py'
+        - 'test/contracts/fixtures/playback_v1.json'
+        - 'test/contracts/fixtures/v1.json'
+        - 'tests/design-preview/**'
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches:
+        - future3/develop
+        - future3/main
+    paths:
+        - '.github/workflows/test_build_webapp_v3.yml'
+        - '.github/actions/build-webapp/**'
+        - 'tools/web_bundle.py'
+        - 'test/web_bundle/test_web_bundle.py'
+        - 'installation/bootstrap-web.sh'
+        - 'installation/websetup/launch.py'
+        - 'installation/websetup/bundle.py'
+        - 'installation/websetup/server.py'
+        - 'installation/websetup/preflight.py'
+        - 'installation/websetup/jobs.py'
+        - 'installation/websetup/worker.py'
+        - 'installation/websetup/index.html'
+        - 'test/websetup/test_launch.py'
+        - 'test/websetup/test_bundle.py'
+        - 'test/websetup/test_preflight.py'
+        - 'test/websetup/test_jobs.py'
+        - 'test/websetup/test_worker.py'
+        - 'test/websetup/test_worker_contract.py'
+        - 'test/websetup/test_job_contract.py'
+        - 'resources/default-settings/nginx.bootstrap-loopback.conf'
+        - 'resources/default-settings/nginx.library-loopback.conf'
+        - 'src/webapp/**'
+        - 'src/jukebox/jukebox/contracts/playback_v1.py'
+        - 'test/contracts/test_playback_v1.py'
+        - 'test/contracts/fixtures/playback_v1.json'
+        - 'test/contracts/fixtures/v1.json'
+        - 'tests/design-preview/**'
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Web App
+        uses: ./.github/actions/build-webapp
+
+      - name: Test React library client and page
+        timeout-minutes: 2
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --runTestsByPath src/components/DesignPreview/LibraryPage.test.js
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Test deterministic web bundle producer and verifier
+        timeout-minutes: 2
+        run: python -m unittest discover -s test/web_bundle -p test_web_bundle.py -v
+
+      - name: Test web setup and bundle intake
+        timeout-minutes: 3
+        run: python -m unittest discover -s test/websetup -p 'test_*.py' -v
+
+      - name: Test Python V1 contracts
+        run: python -m unittest discover -s test/contracts -p test_v1.py -v
+        env:
+          PYTHONPATH: src/jukebox
+
+      - name: Test Python playback admission contracts
+        run: python -m unittest discover -s test/contracts -p test_playback_v1.py -v
+        env:
+          PYTHONPATH: src/jukebox
+
+      - name: Test web app V1 contract seam
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/v1.test.js
+
+      - name: Test web app playback contract seam
+        working-directory: src/webapp
+        run: CI=true npm test -- --watchAll=false --runInBand --testPathPattern=src/contracts/playback-v1.test.js
+
+      - name: Install Playwright test tool
+        run: python -m pip install playwright==1.64.0
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Test built React preview in Chromium
+        timeout-minutes: 3
+        run: >-
+          python -u tests/design-preview/react_smoke.py
+          --serve-directory src/webapp/build
+          --output-dir "${{ runner.temp }}/design-preview-react"
+          --emit-preview-png-base64
+
+      - name: Test built React library against the real catalog in Chromium
+        timeout-minutes: 3
+        run: >-
+          python -u tests/design-preview/library_smoke.py
+          --serve-directory src/webapp/build
+          --output-dir "${{ runner.temp }}/design-preview-library"
+          --emit-library-png-base64
+
+      - name: Download nginx binary without installing or starting a host service
+        run: |
+          sudo apt-get update
+          mkdir -p "${{ runner.temp }}/nginx-package"
+          cd "${{ runner.temp }}/nginx-package"
+          apt-get download nginx
+          package=$(find . -maxdepth 1 -name 'nginx_*.deb' -print -quit)
+          test -n "$package"
+          dpkg-deb -x "$package" extracted
+          test -x extracted/usr/sbin/nginx
+
+      - name: Test built React library through real loopback nginx
+        timeout-minutes: 3
+        run: >-
+          python -u tests/design-preview/nginx_library_smoke.py
+          --serve-directory src/webapp/build
+          --output-dir "${{ runner.temp }}/design-preview-nginx-library"
+          --nginx-binary "${{ runner.temp }}/nginx-package/extracted/usr/sbin/nginx"
+
+      - name: Record actual checkout identity
+        id: web-bundle-identity
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Package and verify built web bundle
+        timeout-minutes: 2
+        env:
+          WEB_BUNDLE_REPOSITORY: ${{ github.repository }}
+          WEB_BUNDLE_COMMIT: ${{ steps.web-bundle-identity.outputs.commit }}
+          WEB_BUNDLE_OUTPUT: ${{ runner.temp }}/web-bundle-upload
+        run: |
+          python tools/web_bundle.py package \
+            --build-dir src/webapp/build \
+            --output-dir "$WEB_BUNDLE_OUTPUT" \
+            --repository "$WEB_BUNDLE_REPOSITORY" \
+            --commit "$WEB_BUNDLE_COMMIT"
+          python tools/web_bundle.py verify \
+            --archive "$WEB_BUNDLE_OUTPUT/webapp-build.tar.gz" \
+            --manifest "$WEB_BUNDLE_OUTPUT/manifest.json" \
+            --repository "$WEB_BUNDLE_REPOSITORY" \
+            --commit "$WEB_BUNDLE_COMMIT"
+
+      - name: Test verified bundle through local bootstrap nginx and Chromium
+        timeout-minutes: 3
+        env:
+          WEB_BUNDLE_REPOSITORY: ${{ github.repository }}
+          WEB_BUNDLE_COMMIT: ${{ steps.web-bundle-identity.outputs.commit }}
+        run: >-
+          python -u test/websetup/test_launch.py --integration
+          --archive "${{ runner.temp }}/web-bundle-upload/webapp-build.tar.gz"
+          --manifest "${{ runner.temp }}/web-bundle-upload/manifest.json"
+          --repository "$WEB_BUNDLE_REPOSITORY"
+          --commit "$WEB_BUNDLE_COMMIT"
+          --nginx-binary "${{ runner.temp }}/nginx-package/extracted/usr/sbin/nginx"
+          --output-dir "${{ runner.temp }}/bootstrap-web"
+
+      - name: Upload verified web bundle
+        id: upload-web-bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoniebox-webapp-${{ steps.web-bundle-identity.outputs.commit }}
+          path: ${{ runner.temp }}/web-bundle-upload/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Download uploaded web bundle into a fresh directory
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.upload-web-bundle.outputs.artifact-id }}
+          path: ${{ runner.temp }}/web-bundle-download
+          merge-multiple: true
+
+      - name: Verify downloaded web bundle
+        timeout-minutes: 2
+        env:
+          WEB_BUNDLE_REPOSITORY: ${{ github.repository }}
+          WEB_BUNDLE_COMMIT: ${{ steps.web-bundle-identity.outputs.commit }}
+          WEB_BUNDLE_DOWNLOAD: ${{ runner.temp }}/web-bundle-download
+        run: |
+          python tools/web_bundle.py verify \
+            --archive "$WEB_BUNDLE_DOWNLOAD/webapp-build.tar.gz" \
+            --manifest "$WEB_BUNDLE_DOWNLOAD/manifest.json" \
+            --repository "$WEB_BUNDLE_REPOSITORY" \
+            --commit "$WEB_BUNDLE_COMMIT"
+
+      - name: Upload browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-preview-react-browser-check
+          path: |
+            ${{ runner.temp }}/design-preview-react/
+            ${{ runner.temp }}/design-preview-library/
+            ${{ runner.temp }}/design-preview-nginx-library/
+            ${{ runner.temp }}/bootstrap-web/
+          if-no-files-found: ignore
+          retention-days: 7
