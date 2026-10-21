@@ -4,6 +4,7 @@ on:
   push:
     branches:
         - 'future3/**'
+        - 'codex/**'
     paths:
         - '.github/workflows/pythonpackage_future3.yml'
         - '.flake8'
@@ -15,6 +16,7 @@ on:
   pull_request:
     branches:
         - 'future3/**'
+        - 'codex/**'
     paths:
         - '.github/workflows/pythonpackage_future3.yml'
         - '.flake8'
