@@ -7,6 +7,14 @@ cd test/playback_session
 python3 -m unittest -v test_mpd_policy_linux.MpdPolicyAcceptance
 ```
 
+On slow devices such as the Raspberry Pi Zero W, MPD binary startup and solo
+`--version` load can take 9 seconds or more. Raise the internal wait limits
+without changing the default (3.0 seconds) by exporting an override first:
+
+```sh
+export MPD_POLICY_TEST_TIMEOUT=30
+```
+
 The fixture copies the staged policy to private temporary paths, selects a
 currently free loopback port, and adds a null audio output. It creates a short
 database bootstrap MPD process so the fixture track is indexed, stops that
