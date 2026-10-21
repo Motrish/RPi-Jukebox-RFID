@@ -25,6 +25,9 @@ _server_module = importlib.import_module("components.library_api.server")
 _cli_module = importlib.import_module("components.library_api.__main__")
 make_read_authorizer = _server_module.make_read_authorizer
 make_server = _server_module.make_server
+from jukebox.contracts import ContractValidationError  # noqa: E402
+from components.playback_session.execution_gate import GateStateError  # noqa: E402
+from components.playlists.store import StoreError  # noqa: E402
 
 _TOKEN = "A" * 43
 _TOKEN_PATTERN = (
@@ -71,9 +74,10 @@ class FakeCatalog:
 
 
 class RunningServer:
-    def __init__(self, catalog, authorizer=None):
+    def __init__(self, catalog, authorizer=None, dispatch=None):
         self.catalog = catalog
         self.auth_calls = []
+        self.auth_event = threading.Event()
         if authorizer is None:
             def authorizer(credential):
                 return credential == _TOKEN
@@ -83,6 +87,7 @@ class RunningServer:
             read_authorizer=self._authorize,
             port=0,
             origin_host="127.0.0.1",
+            dispatch=dispatch,
         )
         address, port = self.server.server_address[:2]
         self.authority = "127.0.0.1:{}".format(port)
@@ -93,6 +98,7 @@ class RunningServer:
 
     def _authorize(self, credential):
         self.auth_calls.append(credential)
+        self.auth_event.set()
         return self.authorizer(credential)
 
     def close(self):
@@ -111,6 +117,10 @@ class RunningServer:
             connection.putrequest(method, target, skip_host=True)
             if headers is None:
                 headers = {}
+            if method == "POST" and body is not None and not any(
+                name.lower() == "content-length" for name in headers
+            ) and not any(name.lower() == "content-length" for name, _ in (raw_headers or [])):
+                headers["Content-Length"] = str(len(body))
             for key, value in headers.items():
                 connection.putheader(key, value)
             if raw_headers:
@@ -346,7 +356,7 @@ class LibraryApiHttpTests(unittest.TestCase):
     def test_routes_methods_bodies_and_origins_are_closed(self):
         headers = self.app.valid_headers()
         for method, target, expected in (
-            ("POST", "/api/library/media", 405),
+            ("POST", "/api/library/media", 404),
             ("PUT", "/api/library/media", 405),
             ("DELETE", "/api/library/media", 405),
             ("OPTIONS", "/api/library/media", 405),
@@ -377,6 +387,158 @@ class LibraryApiHttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
         self.assertEqual(self.catalog.calls, [])
+
+    def test_post_authorization_rechecked_after_body_read(self):
+        body = b'{"action":"PLAYBACK_START"}'
+        for expired, expected_status in ((True, 401), (False, 200)):
+            with self.subTest(expired=expired):
+                clock = mock.Mock(return_value=0.0)
+                dispatch = mock.Mock(return_value={"ok": True})
+                authorizer = make_read_authorizer(_TOKEN, clock=clock)
+                app = RunningServer(
+                    self.catalog, authorizer=authorizer, dispatch=dispatch
+                )
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", app.server.server_address[1], timeout=3
+                )
+                try:
+                    connection.putrequest(
+                        "POST", "/api/playback/commands", skip_host=True
+                    )
+                    connection.putheader("Host", app.authority)
+                    connection.putheader("Authorization", "Bearer " + _TOKEN)
+                    connection.putheader("Content-Length", str(len(body)))
+                    connection.endheaders()
+                    self.assertTrue(app.auth_event.wait(2))
+                    if expired:
+                        clock.return_value = 901.0
+                    connection.send(body)
+                    response = connection.getresponse()
+                    payload = response.read()
+                    self.assertEqual(response.status, expected_status)
+                    if expired:
+                        self.assertEqual(
+                            json.loads(payload)["error"]["code"], "UNAUTHORIZED"
+                        )
+                        dispatch.assert_not_called()
+                    else:
+                        dispatch.assert_called_once_with(
+                            {"action": "PLAYBACK_START"}
+                        )
+                finally:
+                    connection.close()
+                    app.close()
+
+    def test_post_dispatch_returns_wrapper_json_without_projection(self):
+        result = {
+            "admission": {"status": "ACCEPTED"},
+            "playback": {"lastExecution": {"intentId": "i1"}},
+            "operation": "START", "gate": {"owner": None},
+            "failure": None, "intentId": "i1", "executionId": "e1",
+        }
+        app = RunningServer(self.catalog, dispatch=lambda command: result)
+        try:
+            status, headers, payload = app.request(
+                method="POST", target="/api/playback/commands",
+                headers=app.valid_headers(),
+                body=b'{"commandId":"c1","action":"PLAYBACK_START"}',
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(self.body_json(payload), result)
+            self.assert_json_headers(headers, payload)
+        finally:
+            app.close()
+
+    def test_post_auth_path_and_method_statuses(self):
+        cases = [
+            ({"Host": self.app.authority}, 401),
+            ({**self.app.valid_headers(), "Authorization": "Bearer wrong"}, 401),
+            ({"Host": "invalid", "Authorization": "Bearer " + _TOKEN}, 400),
+            ({**self.app.valid_headers(), "Origin": "null"}, 400),
+        ]
+        for headers, expected in cases:
+            with self.subTest(expected=expected, headers=headers):
+                status, _, _ = self.app.request(
+                    method="POST", target="/api/playback/commands",
+                    headers=headers, body=b'{"action":"X"}',
+                )
+                self.assertEqual(status, expected)
+        for target in ("/", "/api/playback/other", "/api/library/media"):
+            status, _, payload = self.app.request(
+                method="POST", target=target, headers=self.app.valid_headers(),
+                body=b'{"action":"X"}',
+            )
+            self.assertEqual(status, 404)
+            self.assertEqual(self.body_json(payload)["error"]["code"], "NOT_FOUND")
+        for method in ("PUT", "DELETE", "OPTIONS"):
+            status, _, _ = self.app.request(
+                method=method, target="/api/playback/commands",
+                headers=self.app.valid_headers(),
+            )
+            self.assertEqual(status, 405)
+
+    def test_post_dispatch_errors_and_unconfigured_statuses(self):
+        command = b'{"action":"PLAYBACK_START"}'
+        cases = (
+            (None, 503, "NOT_CONFIGURED"),
+            (lambda value: (_ for _ in ()).throw(GateStateError("BUSY")), 409,
+             "CONFLICT"),
+            (lambda value: (_ for _ in ()).throw(ContractValidationError("x", "bad")),
+             400, "INVALID_REQUEST"),
+            (lambda value: (_ for _ in ()).throw(GateStateError("DEADLINE_EXPIRED")),
+             503, "PLAYBACK_SERVICE_UNAVAILABLE"),
+            (
+                lambda value: (_ for _ in ()).throw(StoreError({
+                    "code": "STORE_UNAVAILABLE", "message": "Unavailable.",
+                    "retryable": True, "operation": "PLAYBACK_COMMAND",
+                    "details": {"operation": "PLAYBACK_COMMAND"},
+                })),
+                503,
+                "STORE_UNAVAILABLE",
+            ),
+            (lambda value: (_ for _ in ()).throw(RuntimeError("private")),
+             500, "INTERNAL_ERROR"),
+        )
+        for dispatch, expected_status, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                app = RunningServer(self.catalog, dispatch=dispatch)
+                try:
+                    status, _, payload = app.request(
+                        method="POST", target="/api/playback/commands",
+                        headers=app.valid_headers(), body=command,
+                    )
+                    self.assertEqual(status, expected_status)
+                    error = self.body_json(payload)["error"]
+                    self.assertEqual(error["code"], expected_code)
+                    if expected_code == "PLAYBACK_SERVICE_UNAVAILABLE" or (
+                        expected_code == "STORE_UNAVAILABLE"
+                    ):
+                        self.assertEqual(
+                            error["message"],
+                            "The playback command service is unavailable.",
+                        )
+                    self.assertNotIn(b"private", payload)
+                finally:
+                    app.close()
+
+    def test_post_rejects_invalid_or_bounded_body(self):
+        cases = [
+            (None, [], 400),
+            (b"x" * 5000, [("Content-Length", "5000")], 400),
+            (b"{}", [("Content-Length", "2"), ("Content-Length", "2")], 400),
+            (b"[]", [("Content-Length", "2")], 400),
+            (b"{", [("Content-Length", "1")], 400),
+            (b"{}", [("Content-Length", "0")], 400),
+        ]
+        for body, raw_headers, expected in cases:
+            with self.subTest(length=raw_headers):
+                status, _, payload = self.app.request(
+                    method="POST", target="/api/playback/commands",
+                    headers=self.app.valid_headers(), raw_headers=raw_headers,
+                    body=body,
+                )
+                self.assertEqual(status, expected)
+                self.assertEqual(self.body_json(payload)["error"]["code"], "INVALID_REQUEST")
 
     def test_get_bodies_and_transfer_headers_are_rejected_before_read(self):
         cases = [
@@ -489,6 +651,15 @@ class LibraryApiFactoryTests(unittest.TestCase):
                         port=0,
                         origin_host=host,
                     )
+
+    def test_factory_rejects_non_callable_dispatch(self):
+        with self.assertRaises(TypeError):
+            make_server(
+                catalog=FakeCatalog(),
+                read_authorizer=lambda credential: True,
+                port=0,
+                dispatch=object(),
+            )
 
 
 class CliAndImportTests(unittest.TestCase):

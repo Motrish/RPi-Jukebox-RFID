@@ -8,6 +8,9 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from jukebox.contracts import validate_identifier
+from jukebox.contracts import ContractValidationError
+from components.playback_session.execution_gate import GateStateError
+from components.playlists.store import StoreError
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{43}\Z")
@@ -25,11 +28,24 @@ _ERRORS = {
     "NOT_FOUND": "The requested library item was not found.",
     "METHOD_NOT_ALLOWED": "The request method is not allowed.",
     "SERVICE_UNAVAILABLE": "The library service is unavailable.",
+    "PLAYBACK_SERVICE_UNAVAILABLE": "The playback command service is unavailable.",
+    "NOT_CONFIGURED": "The playback command service is not configured.",
+    "CONFLICT": "The playback command service is busy.",
+    "INTERNAL_ERROR": "The request could not be completed.",
 }
 
 
 def _valid_token(value):
     return isinstance(value, str) and _TOKEN_RE.fullmatch(value) is not None
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
 
 
 def make_read_authorizer(token, clock=None):
@@ -176,9 +192,10 @@ class _LibraryHTTPServer(HTTPServer):
     address_family = socket.AF_INET
     request_queue_size = 4
 
-    def __init__(self, catalog, read_authorizer, port, origin_host):
+    def __init__(self, catalog, read_authorizer, dispatch, port, origin_host):
         self.catalog = catalog
         self.read_authorizer = read_authorizer
+        self.dispatch = dispatch
         self.origin_host = origin_host
         super().__init__(("127.0.0.1", port), _LibraryRequestHandler)
         self.expected_authority = "{}:{}".format(
@@ -196,17 +213,24 @@ class _LibraryHTTPServer(HTTPServer):
         return None
 
 
-def make_server(catalog, read_authorizer, port, origin_host="127.0.0.1"):
-    """Create a serial IPv4-loopback server around an injected catalog."""
+def make_server(catalog, read_authorizer, port, origin_host="127.0.0.1", *,
+                dispatch=None):
+    """Create a loopback server; dispatch(command) must return a result dict.
+
+    Runtime wiring must adapt deadline-requiring bridges to this one-argument
+    callback contract. A query string on the command path is intentionally 404.
+    """
     if origin_host not in {"127.0.0.1", "localhost"}:
         raise ValueError("origin_host must be a loopback name")
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("port must be between 0 and 65535")
     if not callable(read_authorizer):
         raise TypeError("read_authorizer must be callable")
+    if dispatch is not None and not callable(dispatch):
+        raise TypeError("dispatch must be callable")
     if catalog is None:
         raise TypeError("catalog is required")
-    return _LibraryHTTPServer(catalog, read_authorizer, port, origin_host)
+    return _LibraryHTTPServer(catalog, read_authorizer, dispatch, port, origin_host)
 
 
 class _LibraryRequestHandler(BaseHTTPRequestHandler):
@@ -270,7 +294,63 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
         self._send_json(405, "METHOD_NOT_ALLOWED", head=True)
 
     def do_POST(self):
-        self._method_not_allowed()
+        self.close_connection = True
+        try:
+            self._check_target_limit()
+            self._check_header_budget()
+            self._check_host_and_origin()
+            token = self._authorized_bearer_credential()
+            if token is None:
+                self._send_json(401, "UNAUTHORIZED")
+                return
+            self._handle_playback_command(token)
+        except _RequestFailure as failure:
+            self._send_json(failure.status, failure.code)
+        except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
+            self.close_connection = True
+        except Exception:
+            self._send_json(500, "INTERNAL_ERROR")
+
+    def _handle_playback_command(self, token):
+        try:
+            path, query = _target_parts(self._raw_target())
+        except ValueError:
+            self._send_json(400, "INVALID_REQUEST", credential=token)
+            return
+        if path != "/api/playback/commands" or query is not None:
+            self._send_json(404, "NOT_FOUND", credential=token)
+            return
+        command = self._read_command_body()
+        token = self._authorized_bearer_credential()
+        if token is None:
+            self._send_json(401, "UNAUTHORIZED")
+            return
+        if self.server.dispatch is None:
+            self._send_json(503, "NOT_CONFIGURED", credential=token)
+            return
+        self._call_dispatch(command, token)
+
+    def _call_dispatch(self, command, token):
+        try:
+            result = self.server.dispatch(command)
+            if not isinstance(result, dict):
+                raise TypeError("dispatch result must be an object")
+        except GateStateError as error:
+            status, code = ((409, "CONFLICT") if error.code == "BUSY"
+                            else (503, "PLAYBACK_SERVICE_UNAVAILABLE"))
+            self._send_json(status, code, credential=token)
+        except ContractValidationError:
+            self._send_json(400, "INVALID_REQUEST", credential=token)
+        except StoreError as error:
+            payload = {"error": {
+                "code": error.error["code"],
+                "message": _ERRORS["PLAYBACK_SERVICE_UNAVAILABLE"],
+            }}
+            self._write_json(503, payload, credential=token)
+        except Exception:
+            self._send_json(500, "INTERNAL_ERROR", credential=token)
+        else:
+            self._write_json(200, result, credential=token)
 
     def do_PUT(self):
         self._method_not_allowed()
@@ -302,6 +382,34 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
         self._check_target_limit()
         self._check_header_budget()
         self._check_body_headers()
+
+    def _read_command_body(self):
+        if self.headers.get_all("Transfer-Encoding") or self.headers.get_all("Expect"):
+            raise _RequestFailure(400, "INVALID_REQUEST")
+        lengths = self.headers.get_all("Content-Length") or []
+        if len(lengths) != 1 or re.fullmatch(r"[0-9]+", lengths[0]) is None:
+            raise _RequestFailure(400, "INVALID_REQUEST")
+        length = int(lengths[0])
+        if not 1 <= length <= 4096:
+            raise _RequestFailure(400, "INVALID_REQUEST")
+        body = bytearray()
+        while len(body) < length:
+            chunk = self.rfile.read(length - len(body))
+            if not chunk:
+                raise _RequestFailure(400, "INVALID_REQUEST")
+            body.extend(chunk)
+        try:
+            text = body.decode("utf-8", errors="strict")
+            command = json.loads(
+                text,
+                parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)),
+                object_pairs_hook=_unique_object,
+            )
+        except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+            raise _RequestFailure(400, "INVALID_REQUEST") from None
+        if not isinstance(command, dict):
+            raise _RequestFailure(400, "INVALID_REQUEST")
+        return command
 
     def _check_target_limit(self):
         raw_target = self.raw_requestline.split(b" ", 2)
@@ -372,6 +480,12 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             return False
 
+    def _authorized_bearer_credential(self):
+        credential = self._bearer_credential()
+        if credential is None or not self._authorized(credential):
+            return None
+        return credential
+
     def _read(self, operation):
         kind, first, second = operation
         if kind == "list":
@@ -391,8 +505,9 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
     def _error_document(code):
         return {"error": {"code": code, "message": _ERRORS[code]}}
 
-    def _send_json(self, status, code, head=False):
-        self._write_json(status, self._error_document(code), head=head)
+    def _send_json(self, status, code, head=False, credential=None):
+        self._write_json(status, self._error_document(code), head=head,
+                         credential=credential)
 
     def _write_json(self, status, value, head=False, credential=None):
         try:
