@@ -27,6 +27,7 @@ class LocalPlaybackService:
         self._driving = False
         self._closed = False
         self._last_failure = None
+        self._last_execution_intent_id = None
         self._retry_stop = False
 
     def request_start(self, entry_id, media_ref):
@@ -155,10 +156,14 @@ class LocalPlaybackService:
     def _snapshot_locked(self, gate=None):
         gate = self._gate.snapshot() if gate is None else gate
         pending = _copy_pending(self._pending)
+        marker = gate["lastExecution"]
+        last_execution = (None if marker is None else
+                          {**marker, "intentId": self._last_execution_intent_id})
         quiescent = not self._driving and gate["owner"] is None and pending is None
         return {"gate": gate, "pending": pending, "driving": self._driving,
                 "closed": self._closed, "quiescent": quiescent,
-                "lastFailure": None if self._last_failure is None else dict(self._last_failure)}
+                "lastFailure": None if self._last_failure is None else dict(self._last_failure),
+                "lastExecution": last_execution}
 
     def _prepare_work_locked(self):
         gate = self._gate.snapshot()
@@ -172,7 +177,8 @@ class LocalPlaybackService:
             return None
         if owner is not None and self._must_stop(gate, pending):
             permit = self._gate.reserve_stop()
-            return "STOP", None, permit, self._gate.lease(permit), None
+            intent = pending if pending is not None and pending["operation"] == "STOP" else None
+            return "STOP", intent, permit, self._gate.lease(permit), None
         if owner is None and pending is not None and pending["operation"] == "STOP":
             self._pending = None
             self._last_failure = None
@@ -197,6 +203,7 @@ class LocalPlaybackService:
             self._publish_start_locked(intent, completion, receipt)
         else:
             self._publish_stop_locked(completion)
+        self._last_execution_intent_id = None if intent is None else intent["intentId"]
         self._driving = False
         return self._snapshot_locked()
 

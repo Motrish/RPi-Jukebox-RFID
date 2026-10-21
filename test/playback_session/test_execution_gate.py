@@ -43,6 +43,37 @@ class ExecutionGateTests(unittest.TestCase):
         gate.complete(permit, self.start_receipt(identity))
         return gate, identity
 
+    def test_last_execution_records_confirmed_start_and_is_defensively_copied(self):
+        gate = ExecutionGate(boot_id="boot_1")
+        permit = gate.reserve_start("entry_1")
+        identity = gate.lease(permit)["identity"]
+        result = gate.complete(permit, self.start_receipt(identity))
+        expected = {**identity, "operation": "START"}
+        self.assertEqual(result["lastExecution"], expected)
+        result["lastExecution"]["executionId"] = "mutated"
+        self.assertEqual(gate.snapshot()["lastExecution"], expected)
+
+    def test_last_execution_records_rejected_start_before_owner_release(self):
+        gate = ExecutionGate(boot_id="boot_1")
+        permit = gate.reserve_start("entry_1")
+        identity = gate.lease(permit)["identity"]
+        rejected = self.start_failure_receipt(identity, "REJECTED")
+        rejected["error"]["code"] = "RESOLUTION_FAILED"
+        result = gate.complete(permit, rejected)
+        self.assertEqual(result["lastExecution"], {**identity, "operation": "START"})
+        self.assertIsNone(result["owner"])
+
+    def test_last_execution_records_unconfirmed_stop_and_noop_preserves_it(self):
+        gate, identity = self.started()
+        stop = gate.reserve_stop()
+        failed = gate.complete(stop, self.stop_failure_receipt(identity))
+        expected = {**identity, "operation": "STOP"}
+        self.assertEqual(failed["lastExecution"], expected)
+        self.assertEqual(failed["owner"], identity)
+        before_noop = gate.snapshot()
+        after_noop = gate.complete(None, None)
+        self.assertEqual(after_noop["lastExecution"], before_noop["lastExecution"])
+
     def test_reservation_invalidation_and_defensive_copies(self):
         gate = ExecutionGate(boot_id="boot_1")
         permits = []

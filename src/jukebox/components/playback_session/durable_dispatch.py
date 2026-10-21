@@ -19,8 +19,11 @@ class DurableDispatch:
     A successful ``operation=None`` means this step did no work because it was
     already satisfied. For executed steps exactly one of ``gate``/``failure`` is
     set; rejected or unknown admissions set neither.
-    ``executionId`` identifies the gate owner (lease/generation), persists until
-    release, and is reused by STOP receipt matching; STOP creates no new ID.
+    ``executionId`` identifies the executed gate owner and is set only when this
+    step performed work; latched/no-op steps report None even if an owner remains.
+    Work attribution uses the service's persisted ``lastExecution`` marker.
+    Its ``intentId`` is in ``playback["lastExecution"]`` (six fields), not the
+    gate's identity-only ``lastExecution`` (five fields); consumers read playback.
     """
 
     def __init__(self, *, store, provider, boot_id, monotonic=None):
@@ -47,7 +50,6 @@ class DurableDispatch:
             if admitted.get("status") != "ACCEPTED":
                 return _wrapper(admitted)
             action = admitted["action"]
-            before = self._service.snapshot()
             if action == "PLAYBACK_START":
                 entry = admitted["result"]["selection"]["entry"]
                 # Receipt-level correlation (commandId inside receipt identity) belongs to the HTTP layer.
@@ -59,16 +61,22 @@ class DurableDispatch:
             pre_run = self._service.snapshot()
             # Propagates provider failure verbatim; C4b will publish a contract-shaped result.
             state = self._service.run_once(deadline=deadline)
-            operation, work_ran = _execution_outcome(before, pre_run, state, intent_id)
-            failure = state.get("lastFailure") if work_ran else None
+            marker = state["lastExecution"]
+            marker_changed = pre_run.get("lastExecution") != marker
+            # Each executed request step gets a unique intent UUID. Intent-less
+            # cleanup STOP cannot repeat an identical marker: the service latch
+            # blocks that path. If this changes, add a service execution counter.
+            operation = marker["operation"] if marker_changed else None
+            execution_id = marker["executionId"] if marker_changed else None
+            failure = state.get("lastFailure") if marker_changed else None
             if failure is not None:
                 result = _wrapper(admitted, state, operation, failure=failure,
                                   intent_id=intent_id,
-                                  execution_id=_execution_id(pre_run, state))
+                                  execution_id=execution_id)
             else:
                 result = _wrapper(admitted, state, operation, gate=state["gate"],
                                   intent_id=intent_id,
-                                  execution_id=_execution_id(pre_run, state))
+                                  execution_id=execution_id)
             if type(command_id) is str:
                 self._completed[command_id] = (dict(admitted), result)
             return result
@@ -104,43 +112,3 @@ def _wrapper(admission, playback=None, operation=None, *, gate=None, failure=Non
     return {"admission": admission, "playback": playback, "operation": operation,
             "gate": gate, "failure": failure, "intentId": intent_id,
             "executionId": execution_id}
-
-
-def _execution_id(pre_run, after):
-    owner = after["gate"]["owner"] or pre_run["gate"]["owner"]
-    return None if owner is None else owner["executionId"]
-
-
-def _execution_outcome(before, pre_run, after, intent_id):
-    owner = pre_run["gate"]["owner"]
-    after_owner = after["gate"]["owner"]
-    owner_trip = None
-    if before["gate"]["owner"] == owner:
-        owner_trip = ("START" if owner is None and after_owner is not None else
-                      "STOP" if owner is not None and after_owner is None else None)
-    pending = pre_run.get("pending")
-    pending_matches = (pending is not None and pending.get("intentId") == intent_id)
-    start_pending_consumed = (pending_matches and pending.get("operation") == "START"
-                              and after.get("pending") is None)
-    start_work = owner_trip == "START" or start_pending_consumed
-    stop_work = (
-        owner is not None
-        and (pre_run["gate"]["cleanupRequired"]
-             or (pending_matches and pending.get("operation") == "STOP"))
-    )
-    # request_start disables retry after STOP_UNCONFIRMED; the service's earlier
-    # failed-stop latch then returns without attempting cleanup, despite owner state.
-    pre_failure = pre_run.get("lastFailure")
-    latched_start = (pending_matches and pending.get("operation") == "START"
-                     and pre_failure is not None
-                     and pre_failure.get("operation") == "STOP"
-                     and pre_failure.get("code") == "STOP_UNCONFIRMED")
-    if latched_start:
-        stop_work = False
-    work_ran = bool(start_work or stop_work)
-    operation = owner_trip
-    if operation is None and work_ran:
-        failure = after.get("lastFailure")
-        if failure is not None:
-            operation = failure.get("operation")
-    return operation, work_ran
