@@ -13,7 +13,10 @@ from jukebox.contracts import ContractValidationError
 class Provider:
     def __init__(self):
         self.calls = []
+        self.identities = []
         self.fail_next_stop = False
+        self.reject_next_start = False
+        self.fail_next_start = False
         self.on_stop = None
 
     def start(self, media_ref, *, lease, deadline):
@@ -24,6 +27,17 @@ class Provider:
             if not self.start_release.wait(2.0):
                 raise RuntimeError("test release timed out")
         ident = lease["identity"]
+        self.identities.append(dict(ident))
+        if self.reject_next_start:
+            self.reject_next_start = False
+            error = {"code": "RESOLUTION_FAILED", "message": "Rejected.",
+                     "retryable": False, "operation": "START"}
+            return receipt("START", ident, "REJECTED", "UNKNOWN", None, error=error)
+        if self.fail_next_start:
+            self.fail_next_start = False
+            error = {"code": "PROVIDER_UNAVAILABLE", "message": "Unavailable.",
+                     "retryable": False, "operation": "START"}
+            return receipt("START", ident, "UNCONFIRMED", "UNKNOWN", None, error=error)
         if not lease["guard"]("START", ident):
             error = {"code": "STALE_EXECUTION", "message": "Lease is stale.",
                      "retryable": False, "operation": "START"}
@@ -32,6 +46,7 @@ class Provider:
 
     def stop(self, *, lease, deadline):
         self.calls.append(("STOP", lease["identity"]["entryId"]))
+        self.identities.append(dict(lease["identity"]))
         callback, self.on_stop = self.on_stop, None
         if callback is not None:
             callback()
@@ -84,6 +99,9 @@ class ServiceTests(unittest.TestCase):
         self.service.request_start("entry_b", {"kind": "LOCAL", "libraryId": "track_b"})
         self.step()
         self.assertEqual([item[0] for item in self.provider.calls], ["START", "STOP"])
+        marker = self.service.snapshot()["lastExecution"]
+        self.assertEqual(marker["operation"], "STOP")
+        self.assertIsNone(marker["intentId"])
         self.service.request_stop()
         self.step()
         self.assertEqual([item[0] for item in self.provider.calls], ["START", "STOP"])
@@ -139,10 +157,13 @@ class ServiceTests(unittest.TestCase):
         self.service.request_stop()
         failed = self.step()
         self.assertEqual(failed["lastFailure"], {"operation": "STOP", "code": "STOP_UNCONFIRMED"})
+        marker_before_latch = failed["lastExecution"]
+        self.assertEqual(marker_before_latch["operation"], "STOP")
         self.service.request_start("entry_b", {"kind": "LOCAL", "libraryId": "track_b"})
         blocked = self.step()
         self.assertEqual(len(self.provider.calls), 2)
         self.assertEqual(blocked["gate"]["owner"]["entryId"], "entry_a")
+        self.assertEqual(blocked["lastExecution"], marker_before_latch)
         self.service.request_stop()
         self.step()
         self.assertEqual([call[0] for call in self.provider.calls], ["START", "STOP", "STOP"])
@@ -312,6 +333,56 @@ class ServiceTests(unittest.TestCase):
         self.assertIsNone(snapshot["gate"]["inFlight"])
         self.assertEqual(snapshot["gate"]["owner"]["entryId"], "entry_interrupt")
         self.assertTrue(snapshot["gate"]["cleanupRequired"])
+
+    def test_last_execution_marker_tracks_start_outcomes_and_intent(self):
+        start_intent = self.service.request_start("entry_a", self.ref)
+        started = self.step()
+        marker = started["lastExecution"]
+        self.assertEqual(marker["operation"], "START")
+        self.assertEqual(marker["intentId"], start_intent)
+        self.assertEqual(marker["executionId"], self.provider.identities[-1]["executionId"])
+
+        rejected_service = LocalPlaybackService(provider=self.provider, boot_id="boot_reject",
+                                                monotonic=lambda: 10.0)
+        self.provider.reject_next_start = True
+        rejected_id = rejected_service.request_start("entry_rejected", self.ref)
+        rejected = rejected_service.run_once(deadline=20.0)
+        self.assertEqual(rejected["lastExecution"]["operation"], "START")
+        self.assertEqual(rejected["lastExecution"]["intentId"], rejected_id)
+        self.assertIsNone(rejected["gate"]["owner"])
+
+        failed_service = LocalPlaybackService(provider=self.provider, boot_id="boot_failed",
+                                              monotonic=lambda: 10.0)
+        self.provider.fail_next_start = True
+        failed_id = failed_service.request_start("entry_failed", self.ref)
+        failed = failed_service.run_once(deadline=20.0)
+        self.assertEqual(failed["lastExecution"]["intentId"], failed_id)
+        self.assertEqual(failed["lastExecution"]["operation"], "START")
+
+    def test_last_execution_marker_tracks_stop_intent_and_cleanup_without_intent(self):
+        self.service.request_start("entry_a", self.ref)
+        self.step()
+        stop_intent = self.service.request_stop()
+        stopped = self.step()
+        self.assertEqual(stopped["lastExecution"]["operation"], "STOP")
+        self.assertEqual(stopped["lastExecution"]["intentId"], stop_intent)
+
+        self.service.request_start("entry_b", {"kind": "LOCAL", "libraryId": "track_b"})
+        self.step()
+        self.service.request_start("entry_c", {"kind": "LOCAL", "libraryId": "track_c"})
+        cleanup = self.step()
+        self.assertEqual(cleanup["lastExecution"]["operation"], "STOP")
+        self.assertIsNone(cleanup["lastExecution"]["intentId"])
+
+    def test_noop_stop_preserves_last_execution_marker(self):
+        self.service.request_start("entry_a", self.ref)
+        self.step()
+        self.service.request_stop()
+        self.step()
+        marker = self.service.snapshot()["lastExecution"]
+        self.service.request_stop()
+        self.step()
+        self.assertEqual(self.service.snapshot()["lastExecution"], marker)
 
 
 if __name__ == "__main__":

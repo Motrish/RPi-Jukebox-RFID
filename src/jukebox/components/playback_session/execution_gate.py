@@ -160,6 +160,7 @@ class ExecutionGate:
         self._cleanup_required = False
         self._error = None
         self._known_epoch = None
+        self._last_execution = None
 
     def snapshot(self):
         with self._lock:
@@ -169,7 +170,9 @@ class ExecutionGate:
         return {"bootId": self._boot_id, "generation": self._generation,
                 "owner": dict(self._owner) if self._owner is not None else None,
                 "inFlight": self._operation, "cleanupRequired": self._cleanup_required,
-                "error": self._error}
+                "error": self._error,
+                "lastExecution": (None if self._last_execution is None
+                                  else dict(self._last_execution))}
 
     def reserve_start(self, entry_id):
         entry_id = _token(entry_id, "entryId")
@@ -243,6 +246,7 @@ class ExecutionGate:
         with self._lock:
             if self._permit is not permit or self._owner != expected:
                 return self._snapshot_locked()
+            self._last_execution = {**expected, "operation": operation}
             self._permit = None
             self._operation = None
             if operation == "START":

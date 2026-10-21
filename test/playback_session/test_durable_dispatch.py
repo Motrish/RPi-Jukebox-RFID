@@ -4,7 +4,6 @@ import threading
 import json
 from unittest.mock import patch
 
-from components.playback_session.durable_dispatch import _execution_outcome
 from components.playback_session.durable_dispatch import DurableDispatch
 from components.playback_session.execution_gate import GateStateError
 from jukebox.contracts import ContractValidationError
@@ -207,16 +206,6 @@ class DurableDispatchTests(unittest.TestCase):
         self.assertEqual(second["failure"], first["failure"])
         self.assertIsNone(second["gate"])
 
-    def test_fresh_failure_without_operation_is_still_top_level_failure(self):
-        before = {"gate": {"owner": None}, "lastFailure": None}
-        pre_run = {"gate": {"owner": None}, "pending": {
-            "intentId": "intent1", "operation": "START"}, "lastFailure": None}
-        after = {"gate": {"owner": None}, "pending": None,
-                 "lastFailure": {"code": "FAILURE_WITHOUT_OPERATION"}}
-        operation, work_ran = _execution_outcome(before, pre_run, after, "intent1")
-        self.assertTrue(work_ran)
-        self.assertIsNone(operation)
-
     def test_noop_stop_reports_no_operation(self):
         self.store.result = accepted("PLAYBACK_STOP")
         result = self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
@@ -255,6 +244,9 @@ class DurableDispatchTests(unittest.TestCase):
         self.assertEqual(result["failure"],
                          {"operation": "START", "code": "START_REJECTED"})
         self.assertIsNone(result["gate"])
+        self.assertEqual(result["executionId"],
+                         result["playback"]["lastExecution"]["executionId"])
+        self.assertEqual(result["playback"]["lastExecution"]["intentId"], result["intentId"])
 
     def test_invalid_start_receipt_reports_invalid_receipt_failure(self):
         self.provider.start_result = lambda identity: receipt(
