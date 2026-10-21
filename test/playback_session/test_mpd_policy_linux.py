@@ -18,7 +18,7 @@ import wave
 from pathlib import Path
 
 
-TIMEOUT = 3.0
+TIMEOUT = float(os.environ.get("MPD_POLICY_TEST_TIMEOUT", "3.0"))
 EXAMPLE = (
     Path(__file__).resolve().parents[2]
     / "resources"
