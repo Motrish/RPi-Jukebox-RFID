@@ -2,6 +2,7 @@
 import unittest
 import threading
 import json
+from unittest.mock import patch
 
 from components.playback_session.durable_dispatch import _execution_outcome
 from components.playback_session.durable_dispatch import DurableDispatch
@@ -24,6 +25,7 @@ def accepted(action="PLAYBACK_START"):
 class Provider:
     def __init__(self):
         self.calls = []
+        self.identities = []
         self.crash = False
         self.crash_error = RuntimeError("provider crash")
         self.start_result = None
@@ -34,6 +36,7 @@ class Provider:
         if self.crash:
             raise self.crash_error
         i = lease["identity"]
+        self.identities.append(dict(i))
         if self.start_result is not None:
             return self.start_result(i)
         return receipt("START", i, "CONFIRMED", "PLAYING", "1")
@@ -41,6 +44,7 @@ class Provider:
     def stop(self, *, lease, deadline):
         self.calls.append("STOP")
         i = lease["identity"]
+        self.identities.append(dict(i))
         if self.stop_unconfirmed:
             return receipt("STOP", i, "UNCONFIRMED", "UNKNOWN", None,
                            {"code": "STOP_UNCONFIRMED", "message": "Not confirmed.",
@@ -112,7 +116,15 @@ class DurableDispatchTests(unittest.TestCase):
                              "status": "REJECTED", "error": {}}
         result = self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
         self.assertEqual(result, {"admission": self.store.result, "playback": None,
-                                  "operation": None, "gate": None, "failure": None})
+                                  "operation": None, "gate": None, "failure": None,
+                                  "intentId": None, "executionId": None})
+
+    def test_rejected_result_carries_no_correlation_ids(self):
+        self.store.result = {"commandId": "c1", "action": "PLAYBACK_START",
+                             "status": "REJECTED", "error": {}}
+        result = self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.assertIsNone(result["intentId"])
+        self.assertIsNone(result["executionId"])
 
     def test_cleanup_stop_after_crash_reports_executed_operation(self):
         self.provider.crash = True
@@ -126,6 +138,45 @@ class DurableDispatchTests(unittest.TestCase):
         self.assertIsNotNone(result["gate"])
         self.assertIsNone(result["failure"])
         self.assertIs(result["gate"], result["playback"]["gate"])
+        self.assertIsNone(result["gate"]["owner"])
+        self.assertEqual(result["executionId"], self.provider.identities[-1]["executionId"])
+
+    def test_successful_start_correlates_command_with_execution_and_intent(self):
+        service = self.dispatch._service
+        original = service.request_start
+        issued = []
+
+        def capture_intent(*args, **kwargs):
+            intent_id = original(*args, **kwargs)
+            issued.append(intent_id)
+            return intent_id
+
+        with patch.object(service, "request_start", side_effect=capture_intent):
+            result = self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
+        owner = result["playback"]["gate"]["owner"]
+        self.assertEqual(result["intentId"], issued[0])
+        self.assertIsInstance(result["executionId"], str)
+        self.assertEqual(result["executionId"], owner["executionId"])
+        self.assertEqual(result["admission"]["commandId"], "c1")
+
+    def test_successful_stop_correlates_with_released_identity(self):
+        started = self.dispatch.dispatch({"commandId": "c0"}, deadline=20.0)
+        old_execution_id = started["executionId"]
+        service = self.dispatch._service
+        original = service.request_stop
+        issued = []
+
+        def capture_intent(*args, **kwargs):
+            intent_id = original(*args, **kwargs)
+            issued.append(intent_id)
+            return intent_id
+
+        self.store.result = accepted("PLAYBACK_STOP")
+        with patch.object(service, "request_stop", side_effect=capture_intent):
+            result = self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.assertEqual(result["intentId"], issued[0])
+        self.assertEqual(result["executionId"], old_execution_id)
+        self.assertIsNone(result["playback"]["gate"]["owner"])
 
     def test_stale_failure_is_not_attributed_to_new_dispatch(self):
         self.dispatch.dispatch({"commandId": "c0"}, deadline=20.0)
@@ -252,6 +303,8 @@ class DurableDispatchTests(unittest.TestCase):
         calls = list(self.provider.calls)
         replay = self.dispatch.dispatch(command, deadline=20.0)
         self.assertEqual(replay, first)
+        self.assertEqual(replay["intentId"], first["intentId"])
+        self.assertEqual(replay["executionId"], first["executionId"])
         self.assertEqual(self.provider.calls, calls)
         self.assertEqual(self.store.admissions, 2)
 

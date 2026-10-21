@@ -198,6 +198,8 @@ class DispatchArgumentTests(unittest.TestCase):
         self.assertIsNone(result["operation"])
         self.assertIsNone(result["gate"])
         self.assertIsNone(result["failure"])
+        self.assertIsNone(result["intentId"])
+        self.assertIsNone(result["executionId"])
         self.assertEqual(self.provider.calls, [])
 
     def test_disallowed_status_is_returned_without_provider_call(self):
@@ -210,6 +212,8 @@ class DispatchArgumentTests(unittest.TestCase):
             self.assertIsNone(result["operation"])
             self.assertIsNone(result["gate"])
             self.assertIsNone(result["failure"])
+            self.assertIsNone(result["intentId"])
+            self.assertIsNone(result["executionId"])
         self.assertEqual(self.provider.calls, [])
 
     def test_unknown_action_is_returned_without_provider_call(self):
@@ -221,6 +225,8 @@ class DispatchArgumentTests(unittest.TestCase):
         self.assertIsNone(result["operation"])
         self.assertIsNone(result["gate"])
         self.assertIsNone(result["failure"])
+        self.assertIsNone(result["intentId"])
+        self.assertIsNone(result["executionId"])
         self.assertEqual(self.provider.calls, [])
 
     def test_non_mapping_admission_fails_without_provider_call(self):
@@ -361,6 +367,8 @@ class DispatchArgumentTests(unittest.TestCase):
         self.assertIs(second["admission"], rejected)
         self.assertIsNot(first, second)
         self.assertIsNone(first["gate"])
+        self.assertIsNone(first["intentId"])
+        self.assertIsNone(first["executionId"])
         self.assertEqual(self.store.admitted, 2)
         self.assertEqual(self.provider.calls, [])
 
@@ -374,11 +382,18 @@ class DispatchArgumentTests(unittest.TestCase):
     def test_successful_result_exposes_gate_instead_of_receipt(self):
         result = self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
         self.assertEqual(set(result), {"admission", "playback", "operation",
-                                       "gate", "failure"})
+                                       "gate", "failure", "intentId",
+                                       "executionId"})
         # Eigentuemerwechsel None -> e1, daher wurde START ausgefuehrt.
         self.assertEqual(result["operation"], "START")
         self.assertIs(result["gate"], result["playback"]["gate"])
         self.assertIsNone(result["failure"])
+        # request_start liefert uuid4().hex als Intent-ID.
+        self.assertRegex(result["intentId"], r"\A[0-9a-f]{32}\Z")
+        owner = result["playback"]["gate"]["owner"]
+        self.assertIsNotNone(owner)
+        self.assertEqual(result["executionId"], owner["executionId"])
+        self.assertRegex(result["executionId"], r"\A[0-9a-f]{32}\Z")
 
     def test_failure_result_exposes_failure_instead_of_receipt(self):
         self.bridge.dispatch({"commandId": "c0"}, deadline=20.0)
@@ -386,11 +401,18 @@ class DispatchArgumentTests(unittest.TestCase):
         self.store.result = accepted("PLAYBACK_STOP")
         result = self.bridge.dispatch({"commandId": "c2"}, deadline=20.0)
         self.assertEqual(set(result), {"admission", "playback", "operation",
-                                       "gate", "failure"})
+                                       "gate", "failure", "intentId",
+                                       "executionId"})
         self.assertEqual(result["failure"], {"operation": "STOP",
                                              "code": "STOP_UNCONFIRMED"})
         self.assertEqual(result["operation"], "STOP")
         self.assertIsNone(result["gate"])
+        self.assertRegex(result["intentId"], r"\A[0-9a-f]{32}\Z")
+        # Unbestaetigter STOP haelt den Owner: dieselbe Gate-Identity bleibt.
+        owner = result["playback"]["gate"]["owner"]
+        self.assertIsNotNone(owner)
+        self.assertEqual(result["executionId"], owner["executionId"])
+        self.assertRegex(result["executionId"], r"\A[0-9a-f]{32}\Z")
 
     def test_store_without_admit_playback_fails_before_provider(self):
         bridge = DurableDispatch(store=object(), provider=self.provider,

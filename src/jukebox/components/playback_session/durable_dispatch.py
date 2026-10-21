@@ -19,6 +19,8 @@ class DurableDispatch:
     A successful ``operation=None`` means this step did no work because it was
     already satisfied. For executed steps exactly one of ``gate``/``failure`` is
     set; rejected or unknown admissions set neither.
+    ``executionId`` identifies the gate owner (lease/generation), persists until
+    release, and is reused by STOP receipt matching; STOP creates no new ID.
     """
 
     def __init__(self, *, store, provider, boot_id, monotonic=None):
@@ -48,7 +50,7 @@ class DurableDispatch:
             before = self._service.snapshot()
             if action == "PLAYBACK_START":
                 entry = admitted["result"]["selection"]["entry"]
-                # commandId→executionId correlation is deferred to C4b.
+                # Receipt-level correlation (commandId inside receipt identity) belongs to the HTTP layer.
                 intent_id = self._service.request_start(entry["entryId"], entry["mediaRef"])
             elif action == "PLAYBACK_STOP":
                 intent_id = self._service.request_stop()
@@ -60,10 +62,13 @@ class DurableDispatch:
             operation, work_ran = _execution_outcome(before, pre_run, state, intent_id)
             failure = state.get("lastFailure") if work_ran else None
             if failure is not None:
-                result = _wrapper(admitted, state, operation,
-                                  failure=failure)
+                result = _wrapper(admitted, state, operation, failure=failure,
+                                  intent_id=intent_id,
+                                  execution_id=_execution_id(pre_run, state))
             else:
-                result = _wrapper(admitted, state, operation, gate=state["gate"])
+                result = _wrapper(admitted, state, operation, gate=state["gate"],
+                                  intent_id=intent_id,
+                                  execution_id=_execution_id(pre_run, state))
             if type(command_id) is str:
                 self._completed[command_id] = (dict(admitted), result)
             return result
@@ -94,9 +99,16 @@ def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _wrapper(admission, playback=None, operation=None, *, gate=None, failure=None):
+def _wrapper(admission, playback=None, operation=None, *, gate=None, failure=None,
+             intent_id=None, execution_id=None):
     return {"admission": admission, "playback": playback, "operation": operation,
-            "gate": gate, "failure": failure}
+            "gate": gate, "failure": failure, "intentId": intent_id,
+            "executionId": execution_id}
+
+
+def _execution_id(pre_run, after):
+    owner = after["gate"]["owner"] or pre_run["gate"]["owner"]
+    return None if owner is None else owner["executionId"]
 
 
 def _execution_outcome(before, pre_run, after, intent_id):
