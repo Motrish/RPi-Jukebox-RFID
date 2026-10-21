@@ -4,6 +4,7 @@ Run on Linux with MPD 0.24.x installed:
     python3 -m unittest -v test/playback_session/test_mpd_policy_linux.py
 """
 
+import math
 import os
 import re
 import secrets
@@ -19,6 +20,12 @@ from pathlib import Path
 
 
 TIMEOUT = float(os.environ.get("MPD_POLICY_TEST_TIMEOUT", "3.0"))
+if not math.isfinite(TIMEOUT) or TIMEOUT <= 0:
+    raise RuntimeError(
+        "MPD_POLICY_TEST_TIMEOUT must be a positive finite number"
+    )
+# Cleanup must stay bounded independently of the device startup budget.
+REAP_TIMEOUT = 10.0
 EXAMPLE = (
     Path(__file__).resolve().parents[2]
     / "resources"
@@ -154,11 +161,11 @@ class MpdPolicyAcceptance(unittest.TestCase):
             return
         child.terminate()
         try:
-            child.wait(timeout=TIMEOUT)
+            child.wait(timeout=REAP_TIMEOUT)
         except subprocess.TimeoutExpired:
             # This handle belongs only to the child created by this fixture.
             child.kill()
-            child.wait(timeout=TIMEOUT)
+            child.wait(timeout=REAP_TIMEOUT)
 
     @staticmethod
     def _write_silent_track(path):
