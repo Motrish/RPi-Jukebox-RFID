@@ -174,9 +174,10 @@ class ExecutionGate:
                 "lastExecution": (None if self._last_execution is None
                                   else dict(self._last_execution))}
 
-    def reserve_start(self, entry_id):
+    def reserve_start(self, entry_id, *, execution_id=None):
         entry_id = _token(entry_id, "entryId")
-        execution_id = uuid.uuid4().hex
+        execution_id = (uuid.uuid4().hex if execution_id is None else
+                        _token(execution_id, "identity.executionId"))
         with self._lock:
             if self._owner is not None:
                 raise GateStateError("OWNER_HELD")

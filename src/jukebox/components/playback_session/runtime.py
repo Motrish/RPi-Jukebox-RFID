@@ -29,10 +29,12 @@ class LocalPlaybackRuntime:
 
     def __init__(self, *, database_path, library_root, credential_path,
                  mpd_host="127.0.0.1", mpd_port=6601, monotonic=time.monotonic,
-                 lock_directory=None):
+                 lock_directory=None, playlist_database_path=None):
         self.database_path = _path(database_path, "database_path")
         self.library_root = _path(library_root, "library_root")
         self.credential_path = _path(credential_path, "credential_path")
+        self.playlist_database_path = (None if playlist_database_path is None else
+                                       _path(playlist_database_path, "playlist_database_path"))
         self.lock_directory = None if lock_directory is None else _path(lock_directory, "lock_directory")
         if type(mpd_host) is not str or mpd_host != "127.0.0.1":
             raise ContractValidationError("mpd_host", "invalid_host")
@@ -44,16 +46,19 @@ class LocalPlaybackRuntime:
         self._lock = threading.Lock()
         self._service_control_condition = threading.Condition(self._lock)
         self._service_control_active = False
+        self._service_control_waiters = 0
         self._phase = "NEW"
         self._ready = False
         self._boot_id = None
         self._failure = None
         self._owner_fd = None
         self._catalog = self._client = self._session = self._provider = self._service = None
+        self._durable_dispatch = None
         self._timer = None
         self._bootstrap_active = False
         self._bootstrap_effect = False
         self._driving = False
+        self._dispatch_active = False
         self._closing_requested = False
         self._finish_active = False
         self._service_shutdown_started = False
@@ -69,7 +74,8 @@ class LocalPlaybackRuntime:
         with self._lock:
             values = (self._phase, self._ready, self._boot_id, self._owner_fd is not None,
                       self._bootstrap_active, self._timer, self._bootstrap_effect,
-                      self._driving, None if self._failure is None else dict(self._failure),
+                  self._driving or self._dispatch_active,
+                  None if self._failure is None else dict(self._failure),
                       self._service, self._resources_closed)
         timer_alive = values[5] is not None and values[5].is_alive()
         service = None if values[9] is None else values[9].snapshot()
@@ -110,28 +116,8 @@ class LocalPlaybackRuntime:
                 return self._fail_bootstrap(code)
             self._bootstrap_core(deadline)
             self._bootstrap_effect = False
-            self._boot_id = uuid.uuid4().hex
-            self._provider = LocalProvider(session=self._session, resolver=self._catalog.resolve,
-                                           monotonic=self._clock, capabilities=_CAPABILITIES)
-            self._service = LocalPlaybackService(provider=self._provider, boot_id=self._boot_id,
-                                                 monotonic=self._clock)
             code = "DRIVER_FAILED"
-            from jukebox.multitimer import GenericEndlessTimerClass
-            self._timer = GenericEndlessTimerClass(name=None, wait_seconds_per_iteration=0.25,
-                                                   function=self._tick)
-            self._timer.start()
-            with self._lock:
-                if self._closing_requested:
-                    self._phase = "CLOSING"
-                    self._ready = False
-                    close_raced = True
-                else:
-                    self._phase = "READY"
-                    self._ready = True
-                    close_raced = False
-                self._bootstrap_active = False
-            if close_raced:
-                self._timer.cancel()
+            self._create_playback_runtime()
             return self.snapshot()
         except _OwnerBusy:
             code = "OWNER_BUSY"
@@ -147,6 +133,38 @@ class LocalPlaybackRuntime:
             if code is None:
                 code = "BOOTSTRAP_FAILED"
         return self._fail_bootstrap(code or "BOOTSTRAP_FAILED")
+
+    def _create_playback_runtime(self):
+        self._boot_id = uuid.uuid4().hex
+        self._provider = LocalProvider(session=self._session, resolver=self._catalog.resolve,
+                                       monotonic=self._clock, capabilities=_CAPABILITIES)
+        self._service = LocalPlaybackService(provider=self._provider, boot_id=self._boot_id,
+                                             monotonic=self._clock)
+        if self.playlist_database_path is not None:
+            from components.playlists.store import PlaylistStore
+            from components.playback_session.durable_dispatch import DurableDispatch
+            store = PlaylistStore(self.playlist_database_path)
+            self._durable_dispatch = DurableDispatch(
+                store=store, service=self._service, boot_id=self._boot_id,
+                monotonic=self._clock, before_execute=self._dispatch_may_execute,
+                publish_intent=self._publish_dispatch_intent,
+                claim_step=self._claim_dispatch_step)
+        from jukebox.multitimer import GenericEndlessTimerClass
+        self._timer = GenericEndlessTimerClass(name=None, wait_seconds_per_iteration=0.25,
+                                               function=self._tick)
+        self._timer.start()
+        with self._lock:
+            if self._closing_requested:
+                self._phase = "CLOSING"
+                self._ready = False
+                close_raced = True
+            else:
+                self._phase = "READY"
+                self._ready = True
+                close_raced = False
+            self._bootstrap_active = False
+        if close_raced:
+            self._timer.cancel()
 
     def _bootstrap_core(self, deadline):
         self._acquire_owner_lock()
@@ -181,15 +199,25 @@ class LocalPlaybackRuntime:
     def request_start(self, entry_id, media_ref):
         _validate_start_request(entry_id, media_ref)
         with self._lock:
+            if self._dispatch_active:
+                raise GateStateError("BUSY")
             if self._phase != "READY" or not self._ready:
                 raise GateStateError("CLOSED" if self._closing_requested else "NOT_READY")
             service = self._service
-        intent_id = service.request_start(entry_id, media_ref)
+        intent = service.prepare_start_intent(entry_id, media_ref)
+        with self._lock:
+            if self._dispatch_active:
+                raise GateStateError("BUSY")
+            if self._phase != "READY" or not self._ready:
+                raise GateStateError("CLOSED" if self._closing_requested else "NOT_READY")
+            intent_id = service.publish_start_intent(intent)
         self._trigger()
         return intent_id
 
     def request_stop(self):
-        with self._lock:
+        with self._service_control_condition:
+            if self._dispatch_active:
+                raise GateStateError("BUSY")
             service = self._service
             if service is None:
                 raise GateStateError("NOT_READY")
@@ -197,15 +225,105 @@ class LocalPlaybackRuntime:
                 raise GateStateError("CLOSED")
             if self._phase == "CLOSED":
                 raise GateStateError("CLOSED")
+            # Authorize a retry before waiting for an in-progress service-control
+            # publication; failure latching observes this generation change.
             self._stop_request_generation += 1
             self._cleanup_driver_enabled = True
-        self._claim_service_control()
+            self._service_control_waiters += 1
+            while self._service_control_active:
+                self._service_control_condition.wait()
+            self._service_control_waiters -= 1
+            self._service_control_active = True
         try:
             result = service.request_stop()
         finally:
             self._release_service_control()
         self._trigger()
         return result
+
+    def dispatch(self, command, *, deadline):
+        _validate_deadline(deadline)
+        with self._lock:
+            if self._phase != "READY" or not self._ready:
+                bridge = self._durable_dispatch
+                closing = self._closing_requested or self._phase in {"CLOSING", "CLOSED"}
+                unavailable = self._phase == "UNAVAILABLE"
+                if (closing or unavailable) and bridge is not None:
+                    pass
+                else:
+                    raise GateStateError("CLOSED" if closing else "NOT_READY")
+            else:
+                bridge = self._durable_dispatch
+                if bridge is None:
+                    raise GateStateError("NOT_CONFIGURED")
+                if (self._driving or self._dispatch_active or self._service_control_active
+                        or self._service_control_waiters):
+                    raise GateStateError("BUSY")
+                self._dispatch_active = True
+                closing = False
+                unavailable = False
+        if closing or unavailable:
+            return self._replay_dispatch(bridge, command, unavailable=unavailable)
+        return self._dispatch_ready(bridge, command, deadline)
+
+    def _replay_dispatch(self, bridge, command, *, unavailable):
+        if not unavailable:
+            return bridge.replay(command)
+        try:
+            return bridge.replay(command)
+        except Exception as error:
+            from components.playback_session.durable_dispatch import _ReplayMiss
+            if isinstance(error, _ReplayMiss):
+                raise GateStateError("NOT_READY") from None
+            raise
+
+    def _dispatch_ready(self, bridge, command, deadline):
+        try:
+            service = self._service
+            with self._lock:
+                stop_request_generation = self._stop_request_generation
+            pre_dispatch = service.snapshot()
+            try:
+                result = bridge.dispatch(command, deadline=deadline,
+                                         claim_step=self._claim_dispatch_step)
+            except BaseException:
+                state = service.snapshot()
+                if (state.get("lastExecution") != pre_dispatch.get("lastExecution")
+                        or state.get("lastFailure") != pre_dispatch.get("lastFailure")):
+                    self._latch_service_failure(
+                        service, state.get("lastFailure") or {
+                            "operation": "DRIVER", "code": "DRIVER_FAILED"},
+                        stop_request_generation=stop_request_generation)
+                raise
+            failure = result.get("failure")
+            if failure is not None:
+                self._latch_service_failure(
+                    service, failure, stop_request_generation=stop_request_generation)
+            return result
+        finally:
+            with self._lock:
+                self._dispatch_active = False
+
+    def _dispatch_may_execute(self):
+        with self._lock:
+            return self._phase == "READY" and self._ready and not self._closing_requested
+
+    def _publish_dispatch_intent(self, action, entry_id, media_ref):
+        service = self._service
+        intent = (service.prepare_start_intent(entry_id, media_ref)
+                  if action == "PLAYBACK_START" else service.prepare_stop_intent())
+        with self._lock:
+            if self._phase != "READY" or not self._ready or self._closing_requested:
+                raise GateStateError("CLOSED")
+            if action == "PLAYBACK_START":
+                return service.publish_start_intent(intent)
+            return service.publish_stop_intent(intent)
+
+    def _claim_dispatch_step(self, intent_id, execution_id):
+        with self._lock:
+            if self._phase != "READY" or not self._ready or self._closing_requested:
+                return None
+            return self._service.claim_intent_step(intent_id, execution_id=execution_id)
 
     def begin_shutdown(self):
         with self._lock:
@@ -287,7 +405,7 @@ class LocalPlaybackRuntime:
     def _wait_for_calls(self, deadline):
         while True:
             with self._lock:
-                active = self._bootstrap_active or self._driving
+                active = self._bootstrap_active or self._driving or self._dispatch_active
             now = self._read_clock()
             if not active:
                 return now < float(deadline)
@@ -379,7 +497,7 @@ class LocalPlaybackRuntime:
 
     def _drive_once(self, deadline):
         with self._lock:
-            if self._driving or self._service is None:
+            if self._driving or self._dispatch_active or self._service is None:
                 return False
             self._driving = True
             service = self._service
@@ -389,40 +507,41 @@ class LocalPlaybackRuntime:
             service.run_once(deadline=deadline)
         except BaseException:
             callback_failed = True
+        try:
+            state = service.snapshot()
+            if callback_failed:
+                self._latch_service_failure(service, state.get("lastFailure") or {
+                    "operation": "DRIVER", "code": "DRIVER_FAILED"},
+                    stop_request_generation=stop_request_generation)
+                return True
+            failure = state["lastFailure"]
+            pending = state["pending"]
+            superseded_start = (
+                failure is not None
+                and failure.get("operation") == "START"
+                and failure.get("code") in {"STALE_EXECUTION", "START_REJECTED"}
+                and pending is not None
+                and pending.get("operation") == "START"
+                and (failure.get("code") == "STALE_EXECUTION"
+                     or (state["gate"]["owner"] is None
+                         and not state["gate"]["cleanupRequired"]))
+            )
+            if failure is not None and not superseded_start:
+                self._latch_service_failure(
+                    service, failure, stop_request_generation=stop_request_generation)
+                return True
+            if state["quiescent"]:
+                with self._lock:
+                    self._cleanup_driver_enabled = False
+            with self._lock:
+                can_continue = (self._phase == "READY" and self._ready
+                                or self._phase == "UNAVAILABLE" and self._cleanup_driver_enabled)
+            if state["pending"] is not None and can_continue and self._timer is not None:
+                self._trigger()
+            return True
         finally:
             with self._lock:
                 self._driving = False
-        state = service.snapshot()
-        if callback_failed:
-            self._latch_service_failure(service, state.get("lastFailure") or {
-                "operation": "DRIVER", "code": "DRIVER_FAILED"},
-                stop_request_generation=stop_request_generation)
-            return True
-        failure = state["lastFailure"]
-        pending = state["pending"]
-        superseded_start = (
-            failure is not None
-            and failure.get("operation") == "START"
-            and failure.get("code") in {"STALE_EXECUTION", "START_REJECTED"}
-            and pending is not None
-            and pending.get("operation") == "START"
-            and (failure.get("code") == "STALE_EXECUTION"
-                 or (state["gate"]["owner"] is None
-                     and not state["gate"]["cleanupRequired"]))
-        )
-        if failure is not None and not superseded_start:
-            self._latch_service_failure(
-                service, failure, stop_request_generation=stop_request_generation)
-            return True
-        if state["quiescent"]:
-            with self._lock:
-                self._cleanup_driver_enabled = False
-        with self._lock:
-            can_continue = (self._phase == "READY" and self._ready
-                            or self._phase == "UNAVAILABLE" and self._cleanup_driver_enabled)
-        if state["pending"] is not None and can_continue and self._timer is not None:
-            self._trigger()
-        return True
 
     def _latch_service_failure(self, service, failure, *, stop_request_generation=None):
         code = ("STOP_UNCONFIRMED" if failure.get("operation") == "STOP"

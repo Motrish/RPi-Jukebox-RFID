@@ -271,6 +271,16 @@ class DurableDispatchTests(unittest.TestCase):
         self.assertEqual(self.store.admitted_result["status"], "ACCEPTED")
         self.assertNotIn("FAILED", [write[1].get("status") for write in self.store.writes])
 
+    def test_provider_crash_replay_raises_memoized_exception_without_reexecution(self):
+        self.provider.crash = True
+        command = {"commandId": "c1"}
+        with self.assertRaises(RuntimeError) as first:
+            self.dispatch.dispatch(command, deadline=20.0)
+        with self.assertRaises(RuntimeError) as replay:
+            self.dispatch.dispatch(command, deadline=20.0)
+        self.assertIs(first.exception, replay.exception)
+        self.assertEqual(self.provider.calls, ["START"])
+
     def test_invalid_replayed_payload_is_rejected_by_store_contract(self):
         self.dispatch.dispatch({"commandId": "c1"}, deadline=20.0)
         calls = list(self.provider.calls)
@@ -298,7 +308,7 @@ class DurableDispatchTests(unittest.TestCase):
         self.assertEqual(replay["intentId"], first["intentId"])
         self.assertEqual(replay["executionId"], first["executionId"])
         self.assertEqual(self.provider.calls, calls)
-        self.assertEqual(self.store.admissions, 2)
+        self.assertEqual(self.store.admissions, 1)
 
     def test_rejected_command_id_is_not_memoized(self):
         self.store.result = {"commandId": "c1", "action": "PLAYBACK_START",

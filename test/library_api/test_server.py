@@ -450,6 +450,9 @@ class LibraryApiHttpTests(unittest.TestCase):
             app.close()
 
     def test_post_auth_path_and_method_statuses(self):
+        # Header-rejected requests are answered without the server ever
+        # reading a declared body, so these checks stay header-only;
+        # sending an unread body races a Windows RST close (WinError 10053).
         cases = [
             ({"Host": self.app.authority}, 401),
             ({**self.app.valid_headers(), "Authorization": "Bearer wrong"}, 401),
@@ -460,13 +463,12 @@ class LibraryApiHttpTests(unittest.TestCase):
             with self.subTest(expected=expected, headers=headers):
                 status, _, _ = self.app.request(
                     method="POST", target="/api/playback/commands",
-                    headers=headers, body=b'{"action":"X"}',
+                    headers=headers,
                 )
                 self.assertEqual(status, expected)
         for target in ("/", "/api/playback/other", "/api/library/media"):
             status, _, payload = self.app.request(
                 method="POST", target=target, headers=self.app.valid_headers(),
-                body=b'{"action":"X"}',
             )
             self.assertEqual(status, 404)
             self.assertEqual(self.body_json(payload)["error"]["code"], "NOT_FOUND")

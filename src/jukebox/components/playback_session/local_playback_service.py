@@ -25,12 +25,16 @@ class LocalPlaybackService:
         self._lock = threading.Lock()
         self._pending = None
         self._driving = False
+        self._preclaimed_work = None
         self._closed = False
         self._last_failure = None
         self._last_execution_intent_id = None
         self._retry_stop = False
 
     def request_start(self, entry_id, media_ref):
+        return self.publish_start_intent(self.prepare_start_intent(entry_id, media_ref))
+
+    def prepare_start_intent(self, entry_id, media_ref):
         if type(entry_id) is not str:
             raise ContractValidationError("entryId", "invalid_identifier")
         if type(media_ref) is not dict:
@@ -44,35 +48,114 @@ class LocalPlaybackService:
         if ref["kind"] != "LOCAL":
             raise ContractValidationError("mediaRef.kind", "unsupported_source_kind")
         intent_id = uuid.uuid4().hex
+        return {"intentId": intent_id, "operation": "START", "entryId": entry,
+                "mediaRef": dict(ref)}
+
+    def publish_start_intent(self, intent):
         with self._lock:
             if self._closed:
                 raise GateStateError("CLOSED")
             self._gate.invalidate()
-            self._pending = {"intentId": intent_id, "operation": "START",
-                             "entryId": entry, "mediaRef": dict(ref)}
+            self._pending = _copy_pending(intent)
             self._retry_stop = False
-        return intent_id
+        return intent["intentId"]
 
     def request_stop(self):
-        intent_id = uuid.uuid4().hex
+        return self.publish_stop_intent(self.prepare_stop_intent())
+
+    @staticmethod
+    def prepare_stop_intent():
+        return {"intentId": uuid.uuid4().hex, "operation": "STOP",
+                "entryId": None, "mediaRef": None}
+
+    def publish_stop_intent(self, intent):
         with self._lock:
             failed_stop = (self._last_failure is not None
                            and self._last_failure["operation"] == "STOP"
                            and self._last_failure["code"] == "STOP_UNCONFIRMED")
             self._gate.invalidate()
-            self._pending = {"intentId": intent_id, "operation": "STOP",
-                             "entryId": None, "mediaRef": None}
+            self._pending = _copy_pending(intent)
             self._retry_stop = bool(failed_stop and not self._driving)
-        return intent_id
+        return intent["intentId"]
 
     def run_once(self, *, deadline):
-        self._validate_deadline(deadline)
-        work = self._claim_work()
+        # Consume the reservation first: a deadline check that runs while a
+        # claim is already held must go through _abort_claim(), never escape.
+        with self._lock:
+            work = self._preclaimed_work
+            self._preclaimed_work = None
         if work is None:
-            return self.snapshot()
+            # No claim is held yet, so a failure here has no state to retire.
+            self._validate_deadline(deadline)
+            work = self._claim_work()
+            if work is None:
+                return self.snapshot()
+        try:
+            self._validate_deadline(deadline)
+        except BaseException:
+            self._abort_claim(work)
+            raise
+        return self._run_claimed(work, deadline)
+
+    def claim_intent_step(self, intent_id, *, execution_id=None):
+        """Atomically reserve one step for this published request intent."""
+        with self._lock:
+            if self._driving:
+                raise GateStateError("BUSY")
+            if self._pending is None or self._pending["intentId"] != intent_id:
+                return False, None
+            if self._pending["operation"] == "START" and execution_id is None:
+                raise TypeError("claim_intent_step() missing required argument: 'execution_id'")
+            self._driving = True
+            try:
+                work = self._prepare_work_locked()
+                if work is not None:
+                    work = self._reserve_claimed_start_locked(work, execution_id)
+            except BaseException:
+                self._driving = False
+                if (self._pending is not None
+                        and self._pending["intentId"] == intent_id):
+                    self._pending = None
+                raise
+            return True, work
+
+    def prepare_intent_claim(self, intent_id):
+        """Prepare any potentially blocking start token outside owner locks."""
+        with self._lock:
+            pending = _copy_pending(self._pending)
+        if pending is None or pending["intentId"] != intent_id:
+            return False, None
+        return True, uuid.uuid4().hex if pending["operation"] == "START" else None
+
+    def run_claimed_step(self, work, *, deadline):
+        """Run a previously reserved step without holding the arbitration lock."""
+        try:
+            self._validate_deadline(deadline)
+        except BaseException:
+            self._abort_claim(work)
+            raise
+        with self._lock:
+            if not self._driving or self._preclaimed_work is not None:
+                raise GateStateError("NOT_READY")
+            self._preclaimed_work = work
+        try:
+            return self.run_once(deadline=deadline)
+        finally:
+            with self._lock:
+                self._preclaimed_work = None
+
+    def _abort_claim(self, work):
+        operation, intent, permit, _lease, _media_ref = work
+        if permit is not None:
+            self._gate.invalidate()
+            completion = self._gate.complete(permit, None)
+            self._publish(operation, intent, completion, None)
+        else:
+            with self._lock:
+                self._driving = False
+
+    def _run_claimed(self, work, deadline):
         operation, intent, permit, lease, media_ref = work
-        if operation == "START":
-            permit, lease = self._reserve_start(intent)
         safe_receipt, failure = self._call_provider(operation, lease, media_ref, deadline)
         completion = self._gate.complete(permit, safe_receipt)
         result = self._publish(operation, intent, completion, safe_receipt)
@@ -104,21 +187,28 @@ class LocalPlaybackService:
                 raise
             if work is None:
                 return None
-            return work
-
-    def _reserve_start(self, intent):
         try:
-            permit = self._gate.reserve_start(intent["entryId"])
-            lease = self._gate.lease(permit)
+            return self._reserve_claimed_start_locked(work)
         except BaseException:
             with self._lock:
                 self._driving = False
+                if (self._pending is not None
+                        and self._pending["intentId"] == work[1]["intentId"]):
+                    self._pending = None
             raise
-        with self._lock:
-            if (self._closed or self._pending is None
-                    or self._pending["intentId"] != intent["intentId"]):
-                self._gate.invalidate()
-        return permit, lease
+
+    def _reserve_claimed_start_locked(self, work, execution_id=None):
+        operation, intent, permit, lease, media_ref = work
+        if operation == "START":
+            permit = self._gate.reserve_start(intent["entryId"], execution_id=execution_id)
+            lease = self._gate.lease(permit)
+            if execution_id is None:
+                with self._lock:
+                    if (self._closed or self._pending is None
+                            or self._pending["intentId"] != intent["intentId"]):
+                        self._gate.invalidate()
+            return operation, intent, permit, lease, media_ref
+        return work
 
     def _call_provider(self, operation, lease, media_ref, deadline):
         failure = None

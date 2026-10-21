@@ -4,7 +4,9 @@
 import atexit
 from collections.abc import Mapping, Sequence
 import logging
+import math
 import os
+import re
 import signal
 import stat
 import sys
@@ -21,6 +23,7 @@ _LOCAL_SIGNAL_BUDGET_SECONDS = 10.0
 _LOCAL_START_BUDGET_SECONDS = 30.0
 _ALLOWED_NAMED_MODULES = {"misc", "publishing"}
 _ALLOWED_OTHER_MODULES = {"misc", "publishing"}
+_BEARER_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 
 
 @atexit.register
@@ -37,6 +40,113 @@ def _local_profile_enabled(config):
     if type(value) is not bool:
         raise ValueError("local_playback.enabled must be a boolean")
     return value
+
+
+def _http_path_value(value, field):
+    if type(value) is not str or not value.startswith("/") or "\x00" in value:
+        raise ValueError("%s must be an absolute path" % field)
+    return value
+
+
+class _BearerTokenUnavailable(RuntimeError):
+    """Raised when the configured bearer token cannot be safely used."""
+
+
+def _read_bearer_token(path, *, os_module=os):
+    """Read one owner-only URL-safe bearer token without following symlinks."""
+    path = _http_path_value(path, "bearer token path")
+    required_flags = ("O_RDONLY", "O_NOFOLLOW", "O_CLOEXEC")
+    if any(not hasattr(os_module, name) for name in required_flags):
+        raise _BearerTokenUnavailable("bearer token unavailable: %s" % path)
+    flags = os_module.O_RDONLY | os_module.O_NOFOLLOW | os_module.O_CLOEXEC
+    flags |= getattr(os_module, "O_NONBLOCK", 0)
+    descriptor = None
+    try:
+        descriptor = os_module.open(path, flags)
+        info = os_module.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os_module.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_size > 64):
+            raise ValueError("unsafe token file")
+        raw = os_module.read(descriptor, 65)
+        if len(raw) > 64:
+            raise ValueError("oversized token")
+        if raw.endswith(b"\n"):
+            raw = raw[:-1]
+        token = raw.decode("ascii")
+        if _BEARER_TOKEN_PATTERN.fullmatch(token) is None:
+            raise ValueError("malformed token")
+        return token
+    except Exception as error:
+        raise _BearerTokenUnavailable("bearer token unavailable: %s" % path) from error
+    finally:
+        if descriptor is not None:
+            try:
+                os_module.close(descriptor)
+            except Exception as error:
+                raise _BearerTokenUnavailable(
+                    "bearer token unavailable: %s" % path) from error
+
+
+def _local_http_section(config):
+    """Return the raw ``local_playback.http`` mapping or None when absent."""
+    section = config.getn("local_playback", default={})
+    if section is None:
+        section = {}
+    if not isinstance(section, Mapping):
+        raise ValueError("local_playback must be a mapping")
+    http = section.get("http", None)
+    if http is None:
+        return None
+    if not isinstance(http, Mapping):
+        raise ValueError("local_playback.http must be a mapping")
+    return http
+
+
+def _local_http_requested(config):
+    """Return True only for an explicitly enabled HTTP opt-in."""
+    http = _local_http_section(config)
+    if http is None:
+        return False
+    enabled = http.get("enabled", False)
+    if type(enabled) is not bool:
+        raise ValueError("local_playback.http.enabled must be a boolean")
+    return enabled
+
+
+def _parse_local_http_options(config):
+    """Return validated HTTP opt-in options; None when not explicitly enabled.
+
+    The read surface is opt-in only: an absent or disabled ``local_playback.http``
+    mapping yields None so no token, store, catalog or server effect is triggered.
+    Any explicitly requested but invalid option fails visibly instead of silently
+    degrading to a disabled state.
+    """
+    http = _local_http_section(config)
+    if http is None or not _local_http_requested(config):
+        return None
+    section = config.getn("local_playback", default={})
+    playlist_database_path = _http_path_value(
+        section.get("playlist_database_path"),
+        "local_playback.playlist_database_path")
+    bearer_token_path = _http_path_value(
+        http.get("bearer_token_path"), "local_playback.http.bearer_token_path")
+    port = http.get("port")
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("local_playback.http.port must be an integer between 1 and 65535")
+    origin_host = http.get("origin_host", "127.0.0.1")
+    if type(origin_host) is not str or origin_host not in ("127.0.0.1", "localhost"):
+        raise ValueError("local_playback.http.origin_host must be a loopback name")
+    budget = http.get("command_budget_seconds", 10.0)
+    if type(budget) not in (int, float):
+        raise ValueError("local_playback.http.command_budget_seconds must be a finite positive number")
+    budget = float(budget)
+    if not math.isfinite(budget) or budget <= 0.0:
+        raise ValueError("local_playback.http.command_budget_seconds must be a finite positive number")
+    return {"playlist_database_path": playlist_database_path,
+            "bearer_token_path": bearer_token_path, "port": port,
+            "origin_host": origin_host, "command_budget_seconds": budget}
 
 
 def _validate_local_modules(config):
@@ -107,6 +217,10 @@ class JukeBox:
         self._signal_cnt = 0
         self.rpc_server = None
         self._local_runtime = None
+        self._local_http_options = None
+        self._local_http = None
+        self._local_http_catalog = None
+        self._http_start_failed = False
         self._legacy_owner_descriptor = None
         self._local_signal_seen = False
         self._local_shutdown_deadline = None
@@ -117,12 +231,19 @@ class JukeBox:
         self._local_profile = _local_profile_enabled(cfg)
         if self._local_profile:
             _validate_local_modules(cfg)
+            self._local_http_options = _parse_local_http_options(cfg)
             self._local_runtime = self._make_local_runtime(cfg)
             _ensure_audio_owner_directory()
             signal.signal(signal.SIGINT, self.signal_handler)
             signal.signal(signal.SIGTERM, self.signal_handler)
             logger.info("Starting Jukebox Daemon in restricted local playback profile")
             return
+
+        if _local_http_requested(cfg):
+            # An explicitly requested HTTP opt-in must never be silently
+            # ignored by the legacy profile: fail before any legacy import
+            # or owner I/O side effect.
+            raise ValueError("local_playback.http requires the restricted local playback profile")
 
         self._legacy_owner_descriptor = _acquire_audio_owner()
         try:
@@ -154,6 +275,12 @@ class JukeBox:
             if type(value) is not str or not value.startswith("/") or "\x00" in value:
                 raise ValueError("local_playback configuration is incomplete or invalid")
             values[key] = value
+        http = _parse_local_http_options(config)
+        if http is not None:
+            # The permanent dispatch admission store is an explicit HTTP
+            # opt-in effect; without the opt-in the runtime default applies
+            # and no playlist store is created.
+            values["playlist_database_path"] = http["playlist_database_path"]
         return LocalPlaybackRuntime(**values)
 
     @property
@@ -226,22 +353,133 @@ class JukeBox:
             except BaseException:
                 logger.exception("Cleanup after restricted module initialization failed")
             raise
-        while not self._local_signal_seen:
-            time.sleep(0.05)
+        if getattr(self, "_local_http_options", None) is not None:
+            try:
+                self._start_local_http()
+            except Exception:
+                self._http_start_failed = True
+                logger.exception("Restricted local HTTP listener failed to start")
+                self._shutdown_local_http_after_start_failure()
+                return 1
+        self._wait_for_local_signal()
         deadline = self._local_shutdown_deadline_or_new()
-        if not self._prepare_local_runtime(deadline):
-            return 1
-        if not self._close_and_join_local_modules(deadline):
+        return self._shutdown_local(deadline)
+
+    def _wait_for_local_signal(self):
+        while not self._local_signal_seen:
+            if self._local_http_worker_failed():
+                break
+            time.sleep(0.05)
+
+    def _local_http_worker_failed(self):
+        http = getattr(self, "_local_http", None)
+        if http is None or getattr(http, "worker_error", None) is None:
+            return False
+        logger.error("Local playback HTTP listener worker failed; shutting down")
+        self._local_signal_seen = True
+        self._local_shutdown_deadline_or_new()
+        return True
+
+    def _shutdown_local(self, deadline):
+        runtime_prepared = False
+        http_drained = False
+        modules_closed = False
+        catalog_closed = False
+        try:
+            self._local_runtime.begin_shutdown()
+            http = getattr(self, "_local_http", None)
+            if http is not None:
+                http.begin_shutdown()
+            runtime_prepared = self._prepare_local_runtime(deadline, begin_shutdown=False)
+        except Exception:
+            logger.exception("Local playback runtime shutdown failed")
+        finally:
+            http_drained = self._finish_local_http(deadline)
+            try:
+                modules_closed = self._close_and_join_local_modules(deadline)
+            except Exception:
+                logger.exception("Local playback module shutdown failed")
+            finally:
+                catalog_closed = self._close_local_http_catalog() if http_drained else False
+        if not http_drained:
+            logger.error("Local playback HTTP listener did not drain before deadline")
+        if not runtime_prepared or not http_drained or not modules_closed or not catalog_closed:
             return 1
         return 0 if self._release_prepared_runtime(deadline) else 1
+
+    def _start_local_http(self):
+        options = getattr(self, "_local_http_options", None)
+        if options is None:
+            return
+        token = _read_bearer_token(options["bearer_token_path"])
+        from components.library_api.runtime_http import LocalPlaybackHTTP
+        from components.library_api.server import make_read_authorizer
+        from components.library_catalog.catalog import LibraryCatalog
+
+        authorizer = make_read_authorizer(token)
+        catalog = LibraryCatalog(options["playlist_database_path"],
+                                 cfg.getn("local_playback", "library_root"))
+        self._local_http_catalog = catalog
+        http = LocalPlaybackHTTP(
+            self._local_runtime, catalog, authorizer, options["port"],
+            options["origin_host"],
+            command_budget_seconds=options["command_budget_seconds"])
+        self._local_http = http
+        http.start()
+
+    def _finish_local_http(self, deadline):
+        http = getattr(self, "_local_http", None)
+        if http is None:
+            return True
+        try:
+            return http.finish_shutdown(deadline=deadline) is True
+        except Exception:
+            logger.exception("Local playback HTTP shutdown failed")
+            return False
+
+    def _close_local_http_catalog(self):
+        catalog = getattr(self, "_local_http_catalog", None)
+        if catalog is None:
+            return True
+        try:
+            catalog.close()
+        except Exception:
+            logger.exception("Local playback HTTP catalog close failed")
+            return False
+        self._local_http_catalog = None
+        return True
+
+    def _shutdown_local_http_after_start_failure(self):
+        deadline = self._local_shutdown_deadline_or_new()
+        drained = False
+        try:
+            self._local_runtime.begin_shutdown()
+            http = getattr(self, "_local_http", None)
+            if http is not None:
+                http.begin_shutdown()
+            self._prepare_local_runtime(deadline, begin_shutdown=False)
+        except Exception:
+            logger.exception("Cleanup after local HTTP startup failure failed")
+        finally:
+            drained = self._finish_local_http(deadline)
+            try:
+                self._close_and_join_local_modules(deadline)
+            except Exception:
+                logger.exception("Cleanup after local module startup failed")
+            finally:
+                if drained:
+                    self._close_local_http_catalog()
+        # Do NOT release owner on HTTP start failure - retain ownership
+        # Return 1 to indicate failure, owner retained
 
     def _local_shutdown_deadline_or_new(self):
         if self._local_shutdown_deadline is None:
             self._local_shutdown_deadline = time.monotonic() + _LOCAL_SIGNAL_BUDGET_SECONDS
         return self._local_shutdown_deadline
 
-    def _prepare_local_runtime(self, deadline):
-        self._local_runtime.begin_shutdown()
+    def _prepare_local_runtime(self, deadline, *, begin_shutdown=True):
+        if begin_shutdown:
+            self._local_runtime.begin_shutdown()
         state = self._local_runtime.finish_shutdown(deadline=deadline, release_owner=False)
         prepared = (state["phase"] == "CLOSING" and not state["ready"]
                     and state["quiescent"] and not state["driverAlive"]

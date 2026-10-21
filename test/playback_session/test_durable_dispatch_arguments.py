@@ -285,6 +285,64 @@ class DispatchArgumentTests(unittest.TestCase):
         self.assertEqual(self.provider.calls, ["START"])
         self.assertEqual(self.store.admitted, 3)
 
+    def test_incomplete_accepted_start_is_not_memoized(self):
+        self.store.result = {"commandId": "c1", "action": "PLAYBACK_START",
+                             "status": "ACCEPTED", "result": {}}
+        for _ in range(2):
+            with self.assertRaises(KeyError):
+                self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.store.result = accepted()
+        self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.assertEqual(self.store.admitted, 3)
+        self.assertEqual(self.provider.calls, ["START"])
+
+    def test_media_ref_missing_library_id_is_not_memoized(self):
+        malformed = accepted()
+        malformed["result"]["selection"]["entry"]["mediaRef"] = {"kind": "LOCAL"}
+        self.store.result = malformed
+        with self.assertRaises(ContractValidationError):
+            self.bridge.dispatch(command(), deadline=20.0)
+        self.assertEqual(self.provider.calls, [])
+
+        self.store.result = accepted()
+        result = self.bridge.dispatch(command(), deadline=20.0)
+        self.assertEqual(result["operation"], "START")
+        self.assertEqual(self.store.admitted, 2)
+        self.assertEqual(self.provider.calls, ["START"])
+
+    def test_media_ref_string_subclass_is_not_memoized(self):
+        class Token(str):
+            pass
+
+        malformed = accepted()
+        malformed["result"]["selection"]["entry"]["mediaRef"]["libraryId"] = Token("m1")
+        self.store.result = malformed
+        with self.assertRaises(ContractValidationError):
+            self.bridge.dispatch(command(), deadline=20.0)
+        self.assertEqual(self.provider.calls, [])
+
+        self.store.result = accepted()
+        result = self.bridge.dispatch(command(), deadline=20.0)
+        self.assertEqual(result["operation"], "START")
+        self.assertEqual(self.store.admitted, 2)
+        self.assertEqual(self.provider.calls, ["START"])
+
+    def test_constructor_claim_step_receives_prepared_execution_id(self):
+        calls = []
+
+        def claim_step(intent_id, execution_id):
+            calls.append((intent_id, execution_id))
+            return True, None
+
+        bridge = DurableDispatch(store=self.store, provider=self.provider,
+                                 boot_id="b1", monotonic=lambda: 1.0,
+                                 claim_step=claim_step)
+        bridge.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.assertEqual(len(calls), 1)
+        self.assertRegex(calls[0][0], r"\A[0-9a-f]{32}\Z")
+        self.assertRegex(calls[0][1], r"\A[0-9a-f]{32}\Z")
+        self.assertEqual(self.provider.calls, [])
+
     def test_dispatch_requires_deadline_keyword(self):
         with self.assertRaises(TypeError):
             self.bridge.dispatch({"commandId": "c1"})
@@ -343,19 +401,19 @@ class DispatchArgumentTests(unittest.TestCase):
         self.assertEqual(self.provider.calls, [])
         self.store.result = accepted("PLAYBACK_START")
         self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
+        self.assertEqual(self.store.admitted, 2)
         self.assertEqual(self.provider.calls, ["START"])
 
     def test_changed_admission_for_known_command_id_is_not_memoized(self):
-        # sol-Ruling: Memo nur bei kanonisch identischer frischer Admission.
-        # Der FakeStore liefert fuer dieselbe commandId eine abweichende,
-        # weiterhin ACCEPTED-Admission (STOP) -> kein Memo, normaler Fluss.
+        # Identical command replay is owner-local and bypasses fresh admission,
+        # so a later, conflicting store response cannot change its outcome.
         first = self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
         self.store.result = accepted("PLAYBACK_STOP")
         result = self.bridge.dispatch({"commandId": "c1"}, deadline=20.0)
-        self.assertIsNot(result, first)
-        self.assertEqual(result["admission"], accepted("PLAYBACK_STOP"))
-        self.assertEqual(self.store.admitted, 2)
-        self.assertEqual(self.provider.calls, ["START", "STOP"])
+        self.assertIs(result, first)
+        self.assertEqual(result["admission"], accepted("PLAYBACK_START"))
+        self.assertEqual(self.store.admitted, 1)
+        self.assertEqual(self.provider.calls, ["START"])
 
     def test_rejected_admission_is_not_memoized(self):
         rejected = {"commandId": "c1", "action": "PLAYBACK_START",
