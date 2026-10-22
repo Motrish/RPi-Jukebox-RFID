@@ -9,6 +9,7 @@ import time
 import uuid
 
 from jukebox.contracts import ContractValidationError, validate_identifier, validate_media_ref
+from jukebox.contracts.v1 import validate_command, validate_command_result
 
 from components.local_provider.adapter import LocalProvider, SessionFailure
 from components.local_provider.mpd_session import MpdSession, TrackedMPDClient
@@ -22,6 +23,12 @@ _FAILURE_CODES = {"UNSUPPORTED_PLATFORM", "OWNER_BUSY", "OWNER_PATH_UNSAFE",
                   "DRIVER_FAILED", "STOP_UNCONFIRMED", "SHUTDOWN_INCOMPLETE"}
 _CAPABILITIES = {"canPause": False, "canResume": False, "canSeek": False,
                  "canConfirmStop": True, "canIdentifyNaturalEnd": False}
+_PLAYLIST_ACTIONS = {
+    "PLAYLIST_CREATE", "PLAYLIST_RENAME", "PLAYLIST_APPEND", "PLAYLIST_REMOVE",
+    "PLAYLIST_MOVE", "PLAYLIST_DELETE", "QUEUE_CREATE", "QUEUE_LOAD_PLAYLIST",
+    "QUEUE_APPEND", "QUEUE_REMOVE", "QUEUE_MOVE", "QUEUE_SET_MODES",
+    "QUEUE_SAVE_NEW_PLAYLIST", "QUEUE_SAVE_PLAYLIST",
+}
 
 
 class LocalPlaybackRuntime:
@@ -54,6 +61,7 @@ class LocalPlaybackRuntime:
         self._owner_fd = None
         self._catalog = self._client = self._session = self._provider = self._service = None
         self._durable_dispatch = None
+        self._playlist_store = None
         self._timer = None
         self._bootstrap_active = False
         self._bootstrap_effect = False
@@ -144,6 +152,7 @@ class LocalPlaybackRuntime:
             from components.playlists.store import PlaylistStore
             from components.playback_session.durable_dispatch import DurableDispatch
             store = PlaylistStore(self.playlist_database_path)
+            self._playlist_store = store
             self._durable_dispatch = DurableDispatch(
                 store=store, service=self._service, boot_id=self._boot_id,
                 monotonic=self._clock, before_execute=self._dispatch_may_execute,
@@ -265,6 +274,78 @@ class LocalPlaybackRuntime:
         if closing or unavailable:
             return self._replay_dispatch(bridge, command, unavailable=unavailable)
         return self._dispatch_ready(bridge, command, deadline)
+
+    def _playlist_call(self, operation, *, deadline, args=()):
+        _validate_deadline(deadline)
+        with self._lock:
+            if self._phase != "READY" or not self._ready:
+                raise GateStateError("CLOSED" if self._closing_requested
+                                     or self._phase in {"CLOSING", "CLOSED"} else "NOT_READY")
+            store = self._playlist_store
+            if store is None:
+                raise GateStateError("NOT_CONFIGURED")
+            if (self._driving or self._dispatch_active or self._service_control_active
+                    or self._service_control_waiters):
+                raise GateStateError("BUSY")
+            self._dispatch_active = True
+        try:
+            if float(deadline) <= self._read_clock():
+                raise GateStateError("DEADLINE_EXPIRED")
+            return operation(store, *args)
+        finally:
+            with self._lock:
+                self._dispatch_active = False
+
+    def playlist_list(self, *, limit=50, cursor=None, deadline):
+        from jukebox.contracts.v1 import validate_identifier, validate_playlist_snapshot
+
+        def read(store, lim, cur):
+            raw = store.list_playlists(limit=lim, cursor=cur)
+            if (type(raw) is not dict or set(raw) != {"contractVersion", "playlists", "nextCursor"}
+                    or type(raw["contractVersion"]) is not int or raw["contractVersion"] != 1
+                    or type(raw["playlists"]) is not list or len(raw["playlists"]) > lim):
+                raise ContractValidationError("playlistList", "invalid_shape")
+            playlists = []
+            for item in raw["playlists"]:
+                if type(item) is not dict or set(item) != {"playlistId", "name", "revision"}:
+                    raise ContractValidationError("playlistList.playlists", "invalid_shape")
+                playlist_id = validate_identifier(item["playlistId"], "playlistId")
+                name, revision = item["name"], item["revision"]
+                snapshot = validate_playlist_snapshot({
+                    "contractVersion": 1, "playlistId": playlist_id,
+                    "name": name, "revision": revision, "entries": [],
+                })
+                playlists.append({"playlistId": snapshot["playlistId"],
+                                  "name": snapshot["name"], "revision": snapshot["revision"]})
+            next_cursor = raw["nextCursor"]
+            if next_cursor is not None:
+                next_cursor = validate_identifier(next_cursor, "nextCursor")
+            if next_cursor is not None and (not playlists or next_cursor != playlists[-1]["playlistId"]):
+                raise ContractValidationError("playlistList.nextCursor", "invalid_cursor")
+            return {"contractVersion": 1, "playlists": playlists, "nextCursor": next_cursor}
+        return self._playlist_call(read, deadline=deadline, args=(limit, cursor))
+
+    def playlist_get(self, playlist_id, *, deadline):
+        from jukebox.contracts.v1 import validate_playlist_snapshot
+        return self._playlist_call(lambda store, value: validate_playlist_snapshot(
+            store.get_playlist(value)), deadline=deadline, args=(playlist_id,))
+
+    def queue_get(self, queue_id, *, deadline):
+        from jukebox.contracts.v1 import validate_queue_snapshot
+        return self._playlist_call(lambda store, value: validate_queue_snapshot(
+            store.get_queue(value)), deadline=deadline, args=(queue_id,))
+
+    def playlist_dispatch(self, command, *, deadline):
+        parsed = validate_command(command)
+        if parsed["action"] not in _PLAYLIST_ACTIONS:
+            raise ContractValidationError("action", "unsupported_action")
+
+        def execute(store, value):
+            result = validate_command_result(store.execute(value))
+            if result["commandId"] != value["commandId"] or result["action"] != value["action"]:
+                raise ContractValidationError("commandResult", "attribution_mismatch")
+            return result
+        return self._playlist_call(execute, deadline=deadline, args=(parsed,))
 
     def _replay_dispatch(self, bridge, command, *, unavailable):
         if not unavailable:
