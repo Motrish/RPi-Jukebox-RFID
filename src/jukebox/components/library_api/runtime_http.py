@@ -10,6 +10,7 @@ drainable lifecycle for the daemon.
 """
 
 import math
+import inspect
 import logging
 import threading
 import time
@@ -54,7 +55,7 @@ class LocalPlaybackHTTP:
 
     def __init__(self, runtime, catalog, read_authorizer, port,
                  origin_host="127.0.0.1", *, command_budget_seconds=10.0,
-                 monotonic=time.monotonic):
+                 monotonic=time.monotonic, write_authorizer=None):
         """Validate every parameter before any resource is bound."""
         if type(command_budget_seconds) not in (int, float):
             raise TypeError("command_budget_seconds must be a number")
@@ -65,6 +66,8 @@ class LocalPlaybackHTTP:
             raise TypeError("monotonic must be callable")
         if not callable(read_authorizer):
             raise TypeError("read_authorizer must be callable")
+        if write_authorizer is not None and not callable(write_authorizer):
+            raise TypeError("write_authorizer must be callable")
         if catalog is None:
             raise TypeError("catalog is required")
         if type(port) is not int or not 0 <= port <= 65535:
@@ -74,6 +77,7 @@ class LocalPlaybackHTTP:
         self._runtime = runtime
         self._catalog = catalog
         self._read_authorizer = read_authorizer
+        self._write_authorizer = write_authorizer
         self._port = port
         self._origin_host = origin_host
         self._command_budget_seconds = command_budget_seconds
@@ -107,12 +111,26 @@ class LocalPlaybackHTTP:
         if not self._runtime_ready():
             raise RuntimeError(_READY_MESSAGE)
         try:
+            callbacks = {
+                name: self._runtime_callback(name)
+                for name in (
+                    "playlist_list", "playlist_get", "queue_get",
+                    "playlist_dispatch",
+                )
+            }
+            callbacks = {
+                name: callback for name, callback in callbacks.items()
+                if callback is not None
+            }
+            if self._write_authorizer is not None:
+                callbacks["write_authorizer"] = self._authorize_write
             server = _library_server.make_server(
                 catalog=self._catalog,
                 read_authorizer=self._authorize,
                 port=self._port,
                 origin_host=self._origin_host,
                 dispatch=self._dispatch,
+                **callbacks
             )
         except Exception as error:
             raise RuntimeError(
@@ -167,6 +185,39 @@ class LocalPlaybackHTTP:
         if self._closing.is_set():
             return False
         return self._read_authorizer(credential)
+
+    def _authorize_write(self, credential):
+        if self._closing.is_set() or self._write_authorizer is None:
+            return False
+        return self._write_authorizer(credential)
+
+    def _runtime_callback(self, name):
+        try:
+            inspect.getattr_static(self._runtime, name)
+        except AttributeError:
+            return None
+        callback = getattr(self._runtime, name)
+        if not callable(callback):
+            return None
+        if name == "playlist_list":
+            return lambda *, limit=50, cursor=None: callback(
+                limit=limit, cursor=cursor, deadline=self._new_deadline()
+            )
+        if name in {"playlist_get", "queue_get"}:
+            return lambda ident: callback(ident, deadline=self._new_deadline())
+        return lambda command: callback(command, deadline=self._new_deadline())
+
+    def _new_deadline(self):
+        if self._closing.is_set():
+            raise GateStateError("CLOSING")
+        deadline = _clock_reading(self._monotonic)
+        try:
+            deadline += self._command_budget_seconds
+        except (OverflowError, TypeError):
+            raise GateStateError("CLOCK_UNAVAILABLE") from None
+        if not _finite(deadline):
+            raise GateStateError("CLOCK_UNAVAILABLE")
+        return deadline
 
     def _dispatch(self, command):
         if self._closing.is_set():
