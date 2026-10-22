@@ -15,6 +15,7 @@ export default function ModernUI() {
   const [readToken, setReadToken] = React.useState('');
   const [writeToken, setWriteToken] = React.useState('');
   const [playlists, setPlaylists] = React.useState(null);
+  const [nextPlaylistCursor, setNextPlaylistCursor] = React.useState(null);
   const [playlist, setPlaylist] = React.useState(null);
   const [queueId, setQueueId] = React.useState('');
   const [queue, setQueue] = React.useState(null);
@@ -37,7 +38,7 @@ export default function ModernUI() {
       controllers.current.forEach((controller) => controller.abort());
       controllers.current.clear();
       busyRef.current = false; setBusy(false);
-      setPlaylists(null); setPlaylist(null); setQueue(null); setCommandResult(null); setSelectedEntryId(null); setError('');
+      setPlaylists(null); setNextPlaylistCursor(null); setPlaylist(null); setQueue(null); setCommandResult(null); setSelectedEntryId(null); setError('');
     }
   }, [readToken, writeToken]);
   React.useEffect(() => {
@@ -69,7 +70,10 @@ export default function ModernUI() {
     return undefined;
   };
 
-  const loadPlaylists = () => run((signal, credentials) => listPlaylists(credentials.readToken, { signal }), (result) => setPlaylists(result.playlists));
+  const loadPlaylists = (cursor) => run((signal, credentials) => listPlaylists(credentials.readToken, { cursor, signal }), (result) => {
+    setPlaylists((current) => cursor ? [...(current || []), ...result.playlists] : result.playlists);
+    setNextPlaylistCursor(result.nextCursor);
+  });
   const selectPlaylist = (id) => run((signal, credentials) => getPlaylist(credentials.readToken, id, { signal }), setPlaylist);
   const loadQueue = () => run((signal, credentials) => getQueue(credentials.readToken, queueId.trim(), { signal }), setQueue);
   const submitCommand = () => run(async (signal, credentials) => {
@@ -91,9 +95,10 @@ export default function ModernUI() {
     <Typography paragraph>Lokale V1-Verwaltung. Zugangscodes bleiben nur in diesem Ansichtszustand.</Typography>
     <TextField label="Lese-Zugangscode" type="password" value={readToken} onChange={(event) => setReadToken(event.target.value)} fullWidth margin="normal" autoComplete="off" />
     <TextField label="Schreib-Zugangscode (optional, getrennt)" type="password" value={writeToken} onChange={(event) => setWriteToken(event.target.value)} fullWidth margin="normal" autoComplete="off" />
-    <Button disabled={busy || !readToken} onClick={loadPlaylists} variant="contained">Playlists laden</Button>
+    <Button disabled={busy || !readToken} onClick={() => loadPlaylists()} variant="contained">Playlists laden</Button>
     {playlists && <Box component="section" sx={{ mt: 2 }}><Typography variant="h6">Playlists</Typography>
       {playlists.map((item) => <Button key={item.playlistId} disabled={busy} onClick={() => selectPlaylist(item.playlistId)} sx={{ mr: 1 }}>{item.name} · Revision {item.revision}</Button>)}
+      {nextPlaylistCursor !== null && <Button disabled={busy} onClick={() => loadPlaylists(nextPlaylistCursor)}>Mehr laden</Button>}
     </Box>}
     <Snapshot title="Playlist" snapshot={playlist} />
     {playlist && <LibraryBrowser items={libraryItems} onSelect={(entry) => setSelectedEntryId(entry.id)} />}

@@ -75,6 +75,72 @@ test('uses the read token for reads and the separate write token for commands', 
   expect(await screen.findByText('Kommando abgelehnt: Die gewünschte Änderung wurde nicht ausgeführt.')).toBeInTheDocument();
 });
 
+test('starts playlist pagination with an undefined cursor', async () => {
+  client.listPlaylists.mockImplementation((_token, { cursor }) => {
+    if (cursor !== undefined && typeof cursor !== 'string') throw new TypeError('cursor must be a string or undefined');
+    return Promise.resolve({ playlists: [], nextCursor: null });
+  });
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('Lese-Zugangscode'), { target: { value: token } });
+  fireEvent.click(screen.getByText('Playlists laden'));
+  await waitFor(() => expect(client.listPlaylists).toHaveBeenCalledWith(token, expect.objectContaining({ cursor: undefined })));
+  expect(await screen.findByText('Playlists')).toBeInTheDocument();
+});
+
+test('requests the first playlist page through the real client without a cursor', async () => {
+  const realClient = jest.requireActual('./playlistClient');
+  const originalFetch = global.fetch;
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ contractVersion: 1, playlists: [], nextCursor: null }),
+  });
+  global.fetch = fetchMock;
+  client.listPlaylists.mockImplementation(realClient.listPlaylists);
+
+  try {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Lese-Zugangscode'), { target: { value: token } });
+    fireEvent.click(screen.getByText('Playlists laden'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith('/api/playlists?limit=50', expect.objectContaining({
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` },
+    }));
+    expect(await screen.findByText('Playlists')).toBeInTheDocument();
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('loads playlist pages once and hides the action when there is no next cursor', async () => {
+  client.listPlaylists.mockResolvedValueOnce({
+    playlists: [{ playlistId: 'p1', name: 'Erste Seite', revision: 1 }], nextCursor: 'p1',
+  });
+  let resolveNextPage;
+  client.listPlaylists.mockReturnValueOnce(new Promise((resolve) => { resolveNextPage = resolve; }));
+  render(<App />);
+  fireEvent.change(screen.getByLabelText('Lese-Zugangscode'), { target: { value: token } });
+  fireEvent.click(screen.getByText('Playlists laden'));
+  expect(await screen.findByText('Erste Seite · Revision 1')).toBeInTheDocument();
+
+  const more = screen.getByRole('button', { name: 'Mehr laden' });
+  fireEvent.click(more);
+  fireEvent.click(more);
+  await waitFor(() => expect(client.listPlaylists).toHaveBeenCalledTimes(2));
+  expect(client.listPlaylists).toHaveBeenLastCalledWith(token, expect.objectContaining({ cursor: 'p1' }));
+  expect(more).toBeDisabled();
+  await act(async () => resolveNextPage({
+    playlists: [{ playlistId: 'p2', name: 'Zweite Seite', revision: 2 }], nextCursor: null,
+  }));
+  expect(await screen.findByText('Zweite Seite · Revision 2')).toBeInTheDocument();
+  expect(screen.getByText('Erste Seite · Revision 1')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Mehr laden' })).not.toBeInTheDocument();
+  expect(client.listPlaylists).toHaveBeenCalledTimes(2);
+});
+
 test('guards a pending command against double submit', async () => {
   let resolveCommand;
   client.sendPlaylistCommand.mockReturnValue(new Promise((resolve) => { resolveCommand = resolve; }));
