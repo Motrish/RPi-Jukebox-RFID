@@ -437,6 +437,8 @@ describe('transport-free V1 JavaScript contract writer', () => {
     });
     const pythonResults = pythonValidate(pythonCases);
     const canonicalCases = [];
+    const outcomeChecks = [];
+    const expectedOutcomeChecks = [];
 
     rawCases.forEach((item, index) => {
       const parsedNumber = JSON.parse(item.rawJson);
@@ -448,22 +450,41 @@ describe('transport-free V1 JavaScript contract writer', () => {
       const javascript = attempt(item.validator, input);
       const python = pythonResults[index];
       if (item.jsOutcome === 'ACCEPT_CANONICAL_SAFE_INTEGER') {
-        expect(javascript.ok).toBe(true);
-        expect(python.ok).toBe(false);
-        expect(python.error.code).toBe(item.pythonOutcome);
         const canonical = JSON.stringify(javascript.value);
-        expect(JSON.parse(canonical)).toEqual(javascript.value);
+        outcomeChecks.push({
+          javascriptAccepted: javascript.ok,
+          pythonAccepted: python.ok,
+          pythonError: python.error && python.error.code,
+          canonicalRoundTrip: JSON.parse(canonical),
+          javascriptValue: javascript.value,
+        });
+        expectedOutcomeChecks.push({
+          javascriptAccepted: true,
+          pythonAccepted: false,
+          pythonError: item.pythonOutcome,
+          canonicalRoundTrip: javascript.value,
+          javascriptValue: javascript.value,
+        });
         canonicalCases.push({
           validator: item.validator,
           serialized: canonical,
           expectedValue: javascript.value,
         });
       } else {
-        expect(javascript.ok).toBe(false);
-        expect(python.ok ? 'ACCEPT' : python.error.code).toBe(item.pythonOutcome);
-        expect(item.jsOutcome).toBe('EXPLICIT_REJECTION_NO_ERROR_PARITY_CLAIM');
+        outcomeChecks.push({
+          javascriptAccepted: javascript.ok,
+          pythonOutcome: python.ok ? 'ACCEPT' : python.error.code,
+          javascriptOutcome: item.jsOutcome,
+        });
+        expectedOutcomeChecks.push({
+          javascriptAccepted: false,
+          pythonOutcome: item.pythonOutcome,
+          javascriptOutcome: 'EXPLICIT_REJECTION_NO_ERROR_PARITY_CLAIM',
+        });
       }
     });
+
+    expect(outcomeChecks).toEqual(expectedOutcomeChecks);
 
     const canonicalResults = pythonValidate(canonicalCases);
     expect(canonicalResults).toHaveLength(canonicalCases.length);
