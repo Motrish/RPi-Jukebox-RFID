@@ -3,6 +3,7 @@
 
 import atexit
 from collections.abc import Mapping, Sequence
+import hmac
 import logging
 import math
 import os
@@ -132,6 +133,11 @@ def _parse_local_http_options(config):
         "local_playback.playlist_database_path")
     bearer_token_path = _http_path_value(
         http.get("bearer_token_path"), "local_playback.http.bearer_token_path")
+    playlist_write_token_path = http.get("playlist_write_token_path")
+    if playlist_write_token_path is not None:
+        playlist_write_token_path = _http_path_value(
+            playlist_write_token_path,
+            "local_playback.http.playlist_write_token_path")
     port = http.get("port")
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("local_playback.http.port must be an integer between 1 and 65535")
@@ -144,9 +150,12 @@ def _parse_local_http_options(config):
     budget = float(budget)
     if not math.isfinite(budget) or budget <= 0.0:
         raise ValueError("local_playback.http.command_budget_seconds must be a finite positive number")
-    return {"playlist_database_path": playlist_database_path,
-            "bearer_token_path": bearer_token_path, "port": port,
-            "origin_host": origin_host, "command_budget_seconds": budget}
+    options = {"playlist_database_path": playlist_database_path,
+               "bearer_token_path": bearer_token_path, "port": port,
+               "origin_host": origin_host, "command_budget_seconds": budget}
+    if playlist_write_token_path is not None:
+        options["playlist_write_token_path"] = playlist_write_token_path
+    return options
 
 
 def _validate_local_modules(config):
@@ -412,18 +421,30 @@ class JukeBox:
         if options is None:
             return
         token = _read_bearer_token(options["bearer_token_path"])
+        write_token_path = options.get("playlist_write_token_path")
+        write_authorizer = None
+        if write_token_path is not None:
+            write_token = _read_bearer_token(write_token_path)
+            if hmac.compare_digest(token, write_token):
+                raise ValueError("read and playlist write tokens must differ")
         from components.library_api.runtime_http import LocalPlaybackHTTP
         from components.library_api.server import make_read_authorizer
         from components.library_catalog.catalog import LibraryCatalog
 
         authorizer = make_read_authorizer(token)
+        if write_token_path is not None:
+            write_authorizer = make_read_authorizer(write_token)
         catalog = LibraryCatalog(options["playlist_database_path"],
                                  cfg.getn("local_playback", "library_root"))
         self._local_http_catalog = catalog
+        http_options = {}
+        if write_authorizer is not None:
+            http_options["write_authorizer"] = write_authorizer
         http = LocalPlaybackHTTP(
             self._local_runtime, catalog, authorizer, options["port"],
             options["origin_host"],
-            command_budget_seconds=options["command_budget_seconds"])
+            command_budget_seconds=options["command_budget_seconds"],
+            **http_options)
         self._local_http = http
         http.start()
 

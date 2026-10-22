@@ -11,6 +11,7 @@ from jukebox.contracts import validate_identifier
 from jukebox.contracts import ContractValidationError
 from components.playback_session.execution_gate import GateStateError
 from components.playlists.store import StoreError
+from . import playlist_api
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{43}\Z")
@@ -21,6 +22,7 @@ _MAX_HEADERS = 32
 _MAX_RESPONSE_BYTES = 256 * 1024
 _SOCKET_TIMEOUT_SECONDS = 5
 _TOKEN_TTL_SECONDS = 900
+_DEFAULT_AUTH = object()
 _JSON_CONTENT_TYPE = "application/json;charset=utf-8"
 _ERRORS = {
     "INVALID_REQUEST": "The request is invalid.",
@@ -29,6 +31,7 @@ _ERRORS = {
     "METHOD_NOT_ALLOWED": "The request method is not allowed.",
     "SERVICE_UNAVAILABLE": "The library service is unavailable.",
     "PLAYBACK_SERVICE_UNAVAILABLE": "The playback command service is unavailable.",
+    "WRITE_UNAUTHORIZED": "Write authorization is required.",
     "NOT_CONFIGURED": "The playback command service is not configured.",
     "CONFLICT": "The playback command service is busy.",
     "INTERNAL_ERROR": "The request could not be completed.",
@@ -176,6 +179,9 @@ def _parse_target(target):
     if path == "/api/library/media":
         limit, cursor = _parse_list_query(query)
         return "list", limit, cursor
+    if path == "/api/playlists":
+        limit, cursor = _parse_list_query(query)
+        return "playlists", limit, cursor
 
     prefix = "/api/library/media/"
     if path.startswith(prefix):
@@ -185,6 +191,17 @@ def _parse_target(target):
         if not library_id or "/" in library_id:
             raise ValueError("invalid target")
         return "get", _validate_identifier(library_id), None
+    for route, kind, validator in (
+        ("/api/playlists/", "playlist", playlist_api.playlist_id),
+        ("/api/queues/", "queue", playlist_api.queue_id),
+    ):
+        if path.startswith(route):
+            if query is not None:
+                raise ValueError("invalid target")
+            ident = path[len(route):]
+            if not ident or "/" in ident:
+                raise ValueError("invalid target")
+            return kind, validator(ident), None
     raise LookupError("unknown target")
 
 
@@ -192,10 +209,17 @@ class _LibraryHTTPServer(HTTPServer):
     address_family = socket.AF_INET
     request_queue_size = 4
 
-    def __init__(self, catalog, read_authorizer, dispatch, port, origin_host):
+    def __init__(self, catalog, read_authorizer, dispatch, port, origin_host,
+                 playlist_list=None, playlist_get=None, queue_get=None,
+                 playlist_dispatch=None, write_authorizer=None):
         self.catalog = catalog
         self.read_authorizer = read_authorizer
         self.dispatch = dispatch
+        self.playlist_list = playlist_list
+        self.playlist_get = playlist_get
+        self.queue_get = queue_get
+        self.playlist_dispatch = playlist_dispatch
+        self.write_authorizer = write_authorizer
         self.origin_host = origin_host
         super().__init__(("127.0.0.1", port), _LibraryRequestHandler)
         self.expected_authority = "{}:{}".format(
@@ -214,7 +238,8 @@ class _LibraryHTTPServer(HTTPServer):
 
 
 def make_server(catalog, read_authorizer, port, origin_host="127.0.0.1", *,
-                dispatch=None):
+                dispatch=None, playlist_list=None, playlist_get=None,
+                queue_get=None, playlist_dispatch=None, write_authorizer=None):
     """Create a loopback server; dispatch(command) must return a result dict.
 
     Runtime wiring must adapt deadline-requiring bridges to this one-argument
@@ -230,7 +255,13 @@ def make_server(catalog, read_authorizer, port, origin_host="127.0.0.1", *,
         raise TypeError("dispatch must be callable")
     if catalog is None:
         raise TypeError("catalog is required")
-    return _LibraryHTTPServer(catalog, read_authorizer, dispatch, port, origin_host)
+    callbacks = (playlist_list, playlist_get, queue_get, playlist_dispatch,
+                 write_authorizer)
+    if any(value is not None and not callable(value) for value in callbacks):
+        raise TypeError("optional callbacks must be callable")
+    return _LibraryHTTPServer(catalog, read_authorizer, dispatch, port, origin_host,
+                              playlist_list, playlist_get, queue_get,
+                              playlist_dispatch, write_authorizer)
 
 
 class _LibraryRequestHandler(BaseHTTPRequestHandler):
@@ -261,25 +292,21 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
         try:
             self._check_request_limits()
             self._check_host_and_origin()
+            try:
+                operation = _parse_target(self._raw_target())
+            except LookupError:
+                operation = None
+            except ValueError:
+                self._send_json(400, "INVALID_REQUEST")
+                return
             token = self._bearer_credential()
             if token is None or not self._authorized(token):
                 self._send_json(401, "UNAUTHORIZED")
                 return
-
-            try:
-                operation = _parse_target(self._raw_target())
-            except LookupError:
+            if operation is None:
                 status, payload = 404, self._error_document("NOT_FOUND")
-            except ValueError:
-                status, payload = 400, self._error_document("INVALID_REQUEST")
             else:
-                try:
-                    status, payload = self._read(operation)
-                except Exception:
-                    status, payload = (
-                        503,
-                        self._error_document("SERVICE_UNAVAILABLE"),
-                    )
+                status, payload = self._safe_read(operation)
 
             self._write_json(status, payload, credential=token)
         except _RequestFailure as failure:
@@ -299,11 +326,22 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
             self._check_target_limit()
             self._check_header_budget()
             self._check_host_and_origin()
-            token = self._authorized_bearer_credential()
-            if token is None:
-                self._send_json(401, "UNAUTHORIZED")
+            try:
+                path, query = _target_parts(self._raw_target())
+            except ValueError:
+                self._send_json(400, "INVALID_REQUEST")
                 return
-            self._handle_playback_command(token)
+            is_playlist = path == "/api/playlist-commands" and query is None
+            authorizer = self.server.write_authorizer if is_playlist else self.server.read_authorizer
+            token = self._authorized_bearer_credential(authorizer)
+            if token is None:
+                self._send_json(403 if is_playlist and authorizer is None else 401,
+                                "WRITE_UNAUTHORIZED" if is_playlist and authorizer is None else "UNAUTHORIZED")
+                return
+            if is_playlist:
+                self._handle_playlist_command(token)
+            else:
+                self._handle_playback_command(token)
         except _RequestFailure as failure:
             self._send_json(failure.status, failure.code)
         except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
@@ -329,6 +367,28 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(503, "NOT_CONFIGURED", credential=token)
             return
         self._call_dispatch(command, token)
+
+    def _handle_playlist_command(self, token):
+        command = self._read_command_body()
+        token = self._authorized_bearer_credential(self.server.write_authorizer)
+        if token is None:
+            self._send_json(401, "WRITE_UNAUTHORIZED")
+            return
+        if self.server.playlist_dispatch is None:
+            self._send_json(503, "NOT_CONFIGURED", credential=token,
+                            authorizer=self.server.write_authorizer)
+            return
+        try:
+            result = playlist_api.execute(command, self.server.playlist_dispatch)
+        except playlist_api.PlaylistAPIError as error:
+            self._send_json(error.status, error.code, credential=token,
+                            authorizer=self.server.write_authorizer)
+        except Exception:
+            self._send_json(503, "SERVICE_UNAVAILABLE", credential=token,
+                            authorizer=self.server.write_authorizer)
+        else:
+            self._write_json(200, result, credential=token,
+                             authorizer=self.server.write_authorizer)
 
     def _call_dispatch(self, command, token):
         try:
@@ -474,15 +534,21 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
             return None
         return credential
 
-    def _authorized(self, credential):
+    def _authorized(self, credential, authorizer=_DEFAULT_AUTH):
+        if authorizer is _DEFAULT_AUTH:
+            authorizer = self.server.read_authorizer
+        if authorizer is None:
+            return False
         try:
-            return self.server.read_authorizer(credential) is True
+            return authorizer(credential) is True
         except Exception:
             return False
 
-    def _authorized_bearer_credential(self):
+    def _authorized_bearer_credential(self, authorizer=_DEFAULT_AUTH):
+        if authorizer is _DEFAULT_AUTH:
+            authorizer = self.server.read_authorizer
         credential = self._bearer_credential()
-        if credential is None or not self._authorized(credential):
+        if credential is None or not self._authorized(credential, authorizer):
             return None
         return credential
 
@@ -493,6 +559,20 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
                 self.server.catalog.list_media(limit=first, cursor=second),
                 first,
             )
+        if kind == "playlists":
+            if self.server.playlist_list is None:
+                raise RuntimeError("playlist list unavailable")
+            return 200, playlist_api.validate_playlist_list(
+                self.server.playlist_list(limit=first, cursor=second), first)
+        if kind == "playlist":
+            if self.server.playlist_get is None:
+                raise _CapabilityUnavailable
+            return 200, playlist_api.playlist_snapshot(
+                self.server.playlist_get(first), first)
+        if kind == "queue":
+            if self.server.queue_get is None:
+                raise _CapabilityUnavailable
+            return 200, playlist_api.queue_snapshot(self.server.queue_get(first), first)
         record = self.server.catalog.get_media(first)
         if record is None:
             return 404, self._error_document("NOT_FOUND")
@@ -501,15 +581,34 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
             raise ValueError("catalog returned a different library item")
         return 200, projected
 
+    def _safe_read(self, operation):
+        try:
+            return self._read(operation)
+        except StoreError as error:
+            code = error.error.get("code")
+            if code == "NOT_FOUND":
+                return 404, self._error_document("NOT_FOUND")
+            if code in {"REVISION_CONFLICT", "COMMAND_ID_REUSED"}:
+                return 409, self._error_document("CONFLICT")
+            return 503, self._error_document("SERVICE_UNAVAILABLE")
+        except GateStateError as error:
+            if error.code == "BUSY":
+                return 409, self._error_document("CONFLICT")
+            return 503, self._error_document("SERVICE_UNAVAILABLE")
+        except Exception:
+            return 503, self._error_document("SERVICE_UNAVAILABLE")
+
     @staticmethod
     def _error_document(code):
         return {"error": {"code": code, "message": _ERRORS[code]}}
 
-    def _send_json(self, status, code, head=False, credential=None):
+    def _send_json(self, status, code, head=False, credential=None,
+                   authorizer=_DEFAULT_AUTH):
         self._write_json(status, self._error_document(code), head=head,
-                         credential=credential)
+                         credential=credential, authorizer=authorizer)
 
-    def _write_json(self, status, value, head=False, credential=None):
+    def _write_json(self, status, value, head=False, credential=None,
+                    authorizer=_DEFAULT_AUTH):
         try:
             payload = json.dumps(
                 value,
@@ -530,7 +629,7 @@ class _LibraryRequestHandler(BaseHTTPRequestHandler):
                 separators=(",", ":"),
             ).encode("utf-8")
 
-        if credential is not None and not self._authorized(credential):
+        if credential is not None and not self._authorized(credential, authorizer):
             status = 401
             payload = json.dumps(
                 self._error_document("UNAUTHORIZED"),
@@ -557,3 +656,7 @@ class _RequestFailure(Exception):
         self.status = status
         self.code = code
         super().__init__(code)
+
+
+class _CapabilityUnavailable(Exception):
+    pass

@@ -1,0 +1,475 @@
+openapi: 3.0.3
+info:
+  title: Phoniebox Playlist- und Queue-API
+  version: 1.0.0
+  description: >-
+    Implementierter V1-HTTP-Vertrag. Implementierung erfolgt über den bestehenden
+    Runtime-owned Store; Review und Integration-Gate sind noch offen. Die
+    Python-Validatoren bleiben für Querfeld- und fachliche Regeln maßgeblich.
+    Request-Bodies sind auf 4096 Byte, Responses auf 256 KiB begrenzt.
+    Tokens sind getrennte 43-Zeichen-URL-safe Read- und Write-Capabilities,
+    jeweils 15 Minuten gültig. Writes benötigen ausschließlich das Write-Token;
+    ohne konfigurierten Write-Token-Pfad antwortet der Write-Endpunkt mit 403.
+    Nur Loopback-Host/Origin wird akzeptiert. Mutationsergebnisse mit Status
+    REJECTED sind fachliche Ergebnisse und werden mit HTTP 200 geliefert.
+    Nach Commit kann ein Ablauf-/Closing-Rennen HTTP 401 liefern: Mutationen
+    niemals automatisch wiederholen; bei bewusstem Retry dieselbe commandId
+    verwenden. Es gibt keinen WebSocket-Vertrag.
+  x-review-status: implemented-review-and-integration-gate-open
+servers:
+  - url: http://127.0.0.1
+paths:
+  /api/playlists:
+    get:
+      operationId: listPlaylists
+      security:
+        - playlistRead: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: cursor
+          in: query
+          required: false
+          description: Opaquer Cursor aus nextCursor; nicht interpretieren.
+          schema: {$ref: '#/components/schemas/Token'}
+      responses:
+        '200':
+          description: Playlistseite
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PlaylistPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/playlists/{playlistId}:
+    get:
+      operationId: getPlaylist
+      security:
+        - playlistRead: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: V1-Playlist-Snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Playlist'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/queues/{queueId}:
+    get:
+      operationId: getQueue
+      security:
+        - playlistRead: []
+      parameters:
+        - name: queueId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Token'}
+      responses:
+        '200':
+          description: V1-Queue-Snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Queue'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/playlist-commands:
+    post:
+      operationId: executePlaylistCommand
+      security:
+        - playlistWrite: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlaylistCommand'}
+      responses:
+        '200':
+          description: >-
+            V1CommandResult; auch status REJECTED wird als HTTP 200 geliefert.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommandResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    playlistRead:
+      type: http
+      scheme: bearer
+      bearerFormat: 43-character URL-safe read capability
+      description: Nur lesende Playlist-/Queue-Endpunkte.
+    playlistWrite:
+      type: http
+      scheme: bearer
+      bearerFormat: 43-character URL-safe write capability
+      description: Ausschließlich POST /api/playlist-commands.
+  parameters:
+    ResourceId:
+      name: playlistId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Token'}
+  responses:
+    BadRequest:
+      description: Ungültige Anfrage oder überschrittenes Request-Limit.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+    Unauthorized:
+      description: Fehlende, ungültige oder abgelaufene Capability.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+    Forbidden:
+      description: Schreibzugriff nicht konfiguriert/erlaubt.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+    NotFound:
+      description: Ressource oder Route nicht gefunden.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+    Conflict:
+      description: HTTP-Konflikt außerhalb eines fachlichen REJECTED-Ergebnisses.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+    Unavailable:
+      description: Dienst oder Store nicht verfügbar.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPError'}
+  schemas:
+    PlaylistPage:
+      type: object
+      additionalProperties: false
+      required: [contractVersion, playlists, nextCursor]
+      properties:
+        contractVersion: {type: integer, enum: [1]}
+        playlists:
+          type: array
+          items: {$ref: '#/components/schemas/PlaylistSummary'}
+        nextCursor:
+          type: string
+          nullable: true
+          description: Opaquer Cursor für die Folgeseite.
+    PlaylistSummary:
+      type: object
+      additionalProperties: false
+      required: [playlistId, name, revision]
+      properties:
+        playlistId: {$ref: '#/components/schemas/Token'}
+        name: {type: string, minLength: 1, maxLength: 256}
+        revision: {$ref: '#/components/schemas/NonNegativeInteger'}
+    Playlist:
+      type: object
+      additionalProperties: false
+      required: [contractVersion, playlistId, name, revision, entries]
+      properties:
+        contractVersion: {type: integer, enum: [1]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        name: {type: string, minLength: 1, maxLength: 256}
+        revision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        entries:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/PlaylistEntry'}
+    PlaylistEntry:
+      type: object
+      additionalProperties: false
+      required: [entryId, mediaRef, title, position]
+      properties:
+        entryId: {$ref: '#/components/schemas/Token'}
+        mediaRef: {$ref: '#/components/schemas/MediaRef'}
+        title: {$ref: '#/components/schemas/Title'}
+        position: {$ref: '#/components/schemas/NonNegativeInteger'}
+    Queue:
+      type: object
+      additionalProperties: false
+      required: [contractVersion, queueId, revision, sourcePlaylistId, sourcePlaylistRevision, entries, currentEntryId, repeatMode, shuffleMode]
+      properties:
+        contractVersion: {type: integer, enum: [1]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        revision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        sourcePlaylistId: {allOf: [{$ref: '#/components/schemas/Token'}], nullable: true}
+        sourcePlaylistRevision: {allOf: [{$ref: '#/components/schemas/NonNegativeInteger'}], nullable: true}
+        entries:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/QueueEntry'}
+        currentEntryId: {allOf: [{$ref: '#/components/schemas/Token'}], nullable: true}
+        repeatMode: {type: string, enum: [OFF, ALL, ONE]}
+        shuffleMode: {type: string, enum: [OFF, ON]}
+    QueueEntry:
+      type: object
+      additionalProperties: false
+      required: [entryId, sourceEntryId, mediaRef, title, position]
+      properties:
+        entryId: {$ref: '#/components/schemas/Token'}
+        sourceEntryId: {allOf: [{$ref: '#/components/schemas/Token'}], nullable: true}
+        mediaRef: {$ref: '#/components/schemas/MediaRef'}
+        title: {$ref: '#/components/schemas/Title'}
+        position: {$ref: '#/components/schemas/NonNegativeInteger'}
+    MediaRef:
+      oneOf:
+        - {$ref: '#/components/schemas/LocalMediaRef'}
+        - {$ref: '#/components/schemas/SpotifyMediaRef'}
+      discriminator:
+        propertyName: kind
+        mapping:
+          LOCAL: '#/components/schemas/LocalMediaRef'
+          SPOTIFY: '#/components/schemas/SpotifyMediaRef'
+    LocalMediaRef:
+      type: object
+      additionalProperties: false
+      required: [kind, libraryId]
+      properties:
+        kind: {type: string, enum: [LOCAL]}
+        libraryId: {$ref: '#/components/schemas/Token'}
+    SpotifyMediaRef:
+      type: object
+      additionalProperties: false
+      required: [kind, uri]
+      properties:
+        kind: {type: string, enum: [SPOTIFY]}
+        uri: {type: string, pattern: '^spotify:track:[A-Za-z0-9]{22}$'}
+    PlaylistCommand:
+      description: >-
+        Geschlossene Union der 14 öffentlichen Actions aus contracts/v1.py;
+        QUEUE_SET_CURRENT (Store-intern) ist ausgeschlossen. Für die
+        vollständige actionabhängige Feldvalidierung ist der V1-Validator
+        maßgeblich; diese OpenAPI-Union bildet Cross-Field-Regeln nicht ab.
+      oneOf:
+        - {$ref: '#/components/schemas/PlaylistCreateCommand'}
+        - {$ref: '#/components/schemas/PlaylistRenameCommand'}
+        - {$ref: '#/components/schemas/PlaylistAppendCommand'}
+        - {$ref: '#/components/schemas/PlaylistRemoveCommand'}
+        - {$ref: '#/components/schemas/PlaylistMoveCommand'}
+        - {$ref: '#/components/schemas/PlaylistDeleteCommand'}
+        - {$ref: '#/components/schemas/QueueCreateCommand'}
+        - {$ref: '#/components/schemas/QueueLoadPlaylistCommand'}
+        - {$ref: '#/components/schemas/QueueAppendCommand'}
+        - {$ref: '#/components/schemas/QueueRemoveCommand'}
+        - {$ref: '#/components/schemas/QueueMoveCommand'}
+        - {$ref: '#/components/schemas/QueueSetModesCommand'}
+        - {$ref: '#/components/schemas/QueueSaveNewPlaylistCommand'}
+        - {$ref: '#/components/schemas/QueueSavePlaylistCommand'}
+    PlaylistCreateCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_CREATE]}
+        name: {$ref: '#/components/schemas/Name'}
+        items: {$ref: '#/components/schemas/CommandItems'}
+      required: [action, name, items]
+    PlaylistRenameCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_RENAME]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        name: {$ref: '#/components/schemas/Name'}
+      required: [action, playlistId, expectedRevision, name]
+    PlaylistAppendCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_APPEND]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        items: {$ref: '#/components/schemas/CommandItems'}
+      required: [action, playlistId, expectedRevision, items]
+    PlaylistRemoveCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_REMOVE]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        entryId: {$ref: '#/components/schemas/Token'}
+      required: [action, playlistId, expectedRevision, entryId]
+    PlaylistMoveCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_MOVE]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        entryId: {$ref: '#/components/schemas/Token'}
+        toPosition: {$ref: '#/components/schemas/NonNegativeInteger'}
+      required: [action, playlistId, expectedRevision, entryId, toPosition]
+    PlaylistDeleteCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [PLAYLIST_DELETE]}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+      required: [action, playlistId, expectedRevision]
+    QueueCreateCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_CREATE]}
+        items: {$ref: '#/components/schemas/CommandItems'}
+      required: [action, items]
+    QueueLoadPlaylistCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_LOAD_PLAYLIST]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedQueueRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedPlaylistRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+      required: [action, queueId, expectedQueueRevision, playlistId, expectedPlaylistRevision]
+    QueueAppendCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_APPEND]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        items: {$ref: '#/components/schemas/CommandItems'}
+      required: [action, queueId, expectedRevision, items]
+    QueueRemoveCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_REMOVE]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        entryId: {$ref: '#/components/schemas/Token'}
+      required: [action, queueId, expectedRevision, entryId]
+    QueueMoveCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_MOVE]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        entryId: {$ref: '#/components/schemas/Token'}
+        toPosition: {$ref: '#/components/schemas/NonNegativeInteger'}
+      required: [action, queueId, expectedRevision, entryId, toPosition]
+    QueueSetModesCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_SET_MODES]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        repeatMode: {type: string, enum: [OFF, ALL, ONE]}
+        shuffleMode: {type: string, enum: [OFF, ON]}
+      required: [action, queueId, expectedRevision, repeatMode, shuffleMode]
+    QueueSaveNewPlaylistCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_SAVE_NEW_PLAYLIST]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedQueueRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        name: {$ref: '#/components/schemas/Name'}
+      required: [action, queueId, expectedQueueRevision, name]
+    QueueSavePlaylistCommand:
+      allOf: [{$ref: '#/components/schemas/CommandBase'}]
+      properties:
+        action: {type: string, enum: [QUEUE_SAVE_PLAYLIST]}
+        queueId: {$ref: '#/components/schemas/Token'}
+        expectedQueueRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+        playlistId: {$ref: '#/components/schemas/Token'}
+        expectedPlaylistRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+      required: [action, queueId, expectedQueueRevision, playlistId, expectedPlaylistRevision]
+    CommandBase:
+      type: object
+      required: [contractVersion, commandId]
+      properties:
+        contractVersion: {type: integer, enum: [1]}
+        commandId: {$ref: '#/components/schemas/Token'}
+    CommandItems:
+      type: array
+      maxItems: 10000
+      items:
+        type: object
+        additionalProperties: false
+        required: [mediaRef, title]
+        properties:
+          mediaRef: {$ref: '#/components/schemas/MediaRef'}
+          title: {$ref: '#/components/schemas/Title'}
+    CommandResult:
+      type: object
+      description: >-
+        V1CommandResult mit je nach action/status gebundenem result/error-Arm.
+        Exakte relationale Prüfung erfolgt durch validate_command_result.
+      additionalProperties: false
+      required: [contractVersion, commandId, action, status]
+      properties:
+        contractVersion: {type: integer, enum: [1]}
+        commandId: {$ref: '#/components/schemas/Token'}
+        action:
+          type: string
+          enum: [PLAYLIST_CREATE, PLAYLIST_RENAME, PLAYLIST_APPEND, PLAYLIST_REMOVE, PLAYLIST_MOVE, PLAYLIST_DELETE, QUEUE_CREATE, QUEUE_LOAD_PLAYLIST, QUEUE_APPEND, QUEUE_REMOVE, QUEUE_MOVE, QUEUE_SET_MODES, QUEUE_SAVE_NEW_PLAYLIST, QUEUE_SAVE_PLAYLIST]
+        status: {type: string, enum: [APPLIED, REJECTED]}
+        result: {$ref: '#/components/schemas/CommandSuccessResult'}
+        error: {$ref: '#/components/schemas/V1Error'}
+    CommandSuccessResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [playlist]
+          properties:
+            playlist: {$ref: '#/components/schemas/Playlist'}
+        - type: object
+          additionalProperties: false
+          required: [queue]
+          properties:
+            queue: {$ref: '#/components/schemas/Queue'}
+        - type: object
+          additionalProperties: false
+          required: [deletedPlaylistId, deletedRevision]
+          properties:
+            deletedPlaylistId: {$ref: '#/components/schemas/Token'}
+            deletedRevision: {$ref: '#/components/schemas/NonNegativeInteger'}
+    V1Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable, operation, details]
+      properties:
+        code: {type: string}
+        message: {$ref: '#/components/schemas/Title'}
+        retryable: {type: boolean}
+        operation: {$ref: '#/components/schemas/Token'}
+        details:
+          type: object
+          description: Geschlossene codeabhängige Details gemäß contracts/v1.py.
+    HTTPError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code: {type: string}
+    Token:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9_-]+$'
+    NonNegativeInteger:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+    Name:
+      type: string
+      minLength: 1
+      maxLength: 256
+      description: Darf nicht ausschließlich Whitespace sein.
+    Title:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      description: Darf nicht ausschließlich Whitespace sein.
