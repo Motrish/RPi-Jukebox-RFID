@@ -48,7 +48,7 @@ test('does not request before code submission and renders duplicate titles by op
   expect(screen.getByText('Unbekannt')).toBeInTheDocument();
   expect(screen.getByText('Fehlt')).toBeInTheDocument();
   expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
-  expect(document.querySelector('img')).toBeNull();
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Bibliothek' })).toHaveFocus();
   expect(fetchLibraryPage).toHaveBeenCalledWith(CODE, undefined, expect.any(AbortSignal));
 });
@@ -404,8 +404,7 @@ test('a completed component request clears its deadline timer', async () => {
     render(<LibraryPage />);
     fireEvent.change(screen.getByLabelText(/zugangscode/i), { target: { value: CODE } });
     fireEvent.click(screen.getByRole('button', { name: /bibliothek öffnen/i }));
-    await act(async () => {});
-    expect(screen.getByText('Erledigt.mp3')).toBeInTheDocument();
+    expect(await screen.findByText('Erledigt.mp3')).toBeInTheDocument();
     expect(jest.getTimerCount()).toBe(0);
   } finally {
     jest.clearAllTimers();

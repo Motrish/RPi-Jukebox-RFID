@@ -72,8 +72,10 @@ describe('playback admission contract parity', () => {
     const python = pythonResults();
     FIXTURE.cases.forEach((testCase, index) => {
       expect(js[index]).toEqual(python[index]);
-      if (testCase.expected) expect(js[index].expected).toEqual(testCase.expected);
-      if (testCase.error) expect(js[index].error).toEqual(testCase.error);
+      expect({ expected: js[index].expected, error: js[index].error }).toEqual({
+        expected: testCase.expected,
+        error: testCase.error,
+      });
     });
   });
 

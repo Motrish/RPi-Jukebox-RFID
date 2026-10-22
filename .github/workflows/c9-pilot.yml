@@ -1,0 +1,71 @@
+name: C9 Modern UI Pilot
+
+on:
+  pull_request:
+    branches:
+      - future3/modern-ui
+    paths:
+      - '.github/workflows/c9-pilot.yml'
+      - 'src/webapp/**'
+      - 'tests/modern-ui/**'
+      - 'src/jukebox/jukebox/contracts/v1.py'
+      - 'test/contracts/fixtures/v1.json'
+permissions:
+  contents: read
+
+jobs:
+  c9-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/webapp/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install webapp dependencies
+        working-directory: src/webapp
+        run: npm ci
+
+      - name: Lint webapp
+        working-directory: src/webapp
+        run: npm run lint
+
+      - name: Run webapp unit tests
+        working-directory: src/webapp
+        env:
+          PYTHON: python
+          PYTHONUTF8: '1'
+          PYTHONIOENCODING: utf-8
+        run: npm run test:unit
+
+      - name: Build webapp
+        working-directory: src/webapp
+        # Keep CRA warnings visible; build errors remain fatal.
+        env: {CI: 'false'}
+        run: npm run build
+
+      - name: Install Playwright
+        run: |
+          python -m pip install playwright==1.64.0
+          python -m playwright install --with-deps chromium
+
+      - name: Run Modern UI browser smoke test
+        env:
+          C9_SMOKE_ARTIFACTS: ${{ runner.temp }}/c9-smoke-artifacts
+        run: python tests/modern-ui/browser_smoke.py
+
+      - name: Upload Modern UI QA outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c9-modern-ui-qa
+          path: ${{ runner.temp }}/c9-smoke-artifacts/
+          if-no-files-found: ignore
