@@ -319,3 +319,36 @@ Akzeptanzkriterien:
 - `npm run test:unit` und `npm run build` laufen lokal und im CI grün.
 - Alle Änderungen liegen auf `codex/p04f-c9-gui`; kein Push auf
   `future3/**` oder `main` ohne explizite Freigabe.
+
+## C9-Pilot: tatsächlicher Umfang und Komponenten-DoD
+
+Der umgesetzte Pilot weicht vom ursprünglichen Backlog oben ab: Statt eines
+Storybook-/Design-Token-Inventars entstand ein isolierter Einstieg
+`#/modern-ui` mit Loopback-HTTP-Pilot. Der bestehende React-17/MUI-5/CRA-Stack
+bleibt erhalten; es wurden weder Storybook noch eine Abhängigkeitsmigration
+hinzuerfunden. Der tatsächliche Umfang und seine Sicherheitsgrenzen stehen in
+[`docs/modern-ui-pilot.md`](../../docs/modern-ui-pilot.md).
+
+| Bereich | Status | DoD / Abgrenzung |
+| --- | --- | --- |
+| PlayerControls | teilweise | Komponente und Tests vorhanden. Keine neuen Geräte-Pause-, Next- oder Lautstärke-Fähigkeiten. |
+| LibraryBrowser | teilweise | Suche und Auswahl als nicht virtualisierte Liste vorhanden; keine skalierbare Virtualisierung. |
+| SettingsPage | teilweise | Lokaler Konfigurationsentwurf mit Validierung; nicht daemonwirksam und kein persistentes „gespeichert“. |
+| CoverArt | offen | Kein eigenständiger, abgenommener CoverArt-Bereich dieses Piloten. |
+
+### Pilot-Abnahme und offene Restarbeit
+
+- Isolierter `#/modern-ui`-Boot ohne LegacyWebsocket sowie Playlist-/Queue-
+  Lesezugriffe und V1-JSON-Schreibzugriff mit getrenntem Schreib-Token sind der
+  Pilot-Scope; Details und Grenzen siehe Pilot-Dokument.
+- Der HTTP-Pilot bleibt Loopback-only. Kein LAN-/Produktionsbetrieb und kein
+  Pi-Deployment sind Teil dieser Abnahme.
+- Größere Restroadmap: C9-LivePlayback, benutzerfreundliche Formular-CRUD-
+  Abläufe und Virtualisierung bleiben offen und sind nicht als erledigt
+  abzunehmen.
+- CI-Workflow `.github/workflows/c9-pilot.yml` führt Lint, Unit-Tests, Build
+  und Chromium-Smoke-Test aus. `CI=false` beim CRA-Build lässt vorhandene
+  Legacy-Warnungen sichtbar, macht sie aber nicht zu Buildfehlern; es schaltet
+  keine Tests ab.
+- Laufzahlen oder erfolgreiche Gates sind hier nicht behauptet; sie sind nur
+  anhand eines tatsächlich ausgeführten CI-/Testlaufs zu bestätigen.

@@ -10,17 +10,6 @@ on:
       - 'tests/modern-ui/**'
       - 'src/jukebox/jukebox/contracts/v1.py'
       - 'test/contracts/fixtures/v1.json'
-  push:
-    branches:
-      - codex/p04f-c9-gui
-      - future3/modern-ui
-    paths:
-      - '.github/workflows/c9-pilot.yml'
-      - 'src/webapp/**'
-      - 'tests/modern-ui/**'
-      - 'src/jukebox/jukebox/contracts/v1.py'
-      - 'test/contracts/fixtures/v1.json'
-
 permissions:
   contents: read
 
