@@ -1,0 +1,85 @@
+﻿name: Spotify ARMv6 probe
+
+on:
+  push:
+    branches:
+      - codex/s01-armv6-spotify-probe
+    paths:
+      - .github/workflows/build_spotify_armv6_probe.yml
+      - tools/spotify/armv6-probe-build.sh
+      - docs/spotify-armv6-probe.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-probe:
+    name: Build and verify the manual ARMv6 probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the probe sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned librespot source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git clone --filter=blob:none https://github.com/librespot-org/librespot.git "$RUNNER_TEMP/librespot"
+          git -C "$RUNNER_TEMP/librespot" checkout --detach 19959512c212cbc48a3ff64382fe204f52c659a7
+          test "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD)" = 19959512c212cbc48a3ff64382fe204f52c659a7
+          test "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD:Cargo.lock)" = 68fa2e109f03ed820143b005ea5779e6b325c530
+          mkdir -p "$RUNNER_TEMP/s01-artifact"
+          {
+            printf 'upstream_repository=https://github.com/librespot-org/librespot.git\n'
+            printf 'upstream_commit=%s\n' "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD)"
+            printf 'cargo_lock_git_blob=%s\n' "$(git -C "$RUNNER_TEMP/librespot" rev-parse HEAD:Cargo.lock)"
+            printf 'cargo_lock_sha256=%s\n' "$(sha256sum "$RUNNER_TEMP/librespot/Cargo.lock" | awk '{print $1}')"
+          } > "$RUNNER_TEMP/s01-artifact/upstream-git-provenance.txt"
+
+      - name: Build inside the audited immutable ARMv6 toolchain image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if ! command -v rustup >/dev/null 2>&1; then
+            printf 'The pinned runner image has no official rustup installation; refusing an alternate installer.\n' >&2
+            exit 1
+          fi
+          rustup toolchain install 1.90.0 --profile minimal --target arm-unknown-linux-musleabihf
+          rust_bin_dir="$(dirname "$(rustup which --toolchain 1.90.0 rustc)")"
+          rust_dir="$(dirname "${rust_bin_dir}")"
+          test -x "${rust_dir}/bin/cargo"
+          test "$("${rust_dir}/bin/rustc" --version | awk '{print $2}')" = '1.90.0'
+          {
+            printf 'rustup=%s\n' "$(rustup --version)"
+            printf 'toolchain=%s\n' "$("${rust_dir}/bin/rustc" -vV)"
+            printf 'target_installed='; rustup target list --toolchain 1.90.0 --installed
+          } >> "$RUNNER_TEMP/s01-artifact/upstream-git-provenance.txt"
+
+          image_ref='ghcr.io/cross-rs/arm-unknown-linux-musleabihf@sha256:41abfe511a58facf4d07a23fece3b648062c781baa6a7afc17306f9cb6e6ffca'
+          docker pull "${image_ref}"
+          docker image inspect "${image_ref}" --format 'Image ID={{.Id}} platform={{.Os}}/{{.Architecture}} created={{.Created}} repo-digests={{json .RepoDigests}} labels={{json .Config.Labels}}' \
+            | tee "$RUNNER_TEMP/s01-artifact/container-image.txt"
+          revision="$(docker image inspect "${image_ref}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          test "${revision}" = 526d03ddcd2f70e683074b3ea6f75ed300f33132
+          docker run --rm \
+            --entrypoint /bin/bash \
+            --volume "$RUNNER_TEMP/librespot:/src:ro" \
+            --volume "$GITHUB_WORKSPACE:/probe:ro" \
+            --volume "$RUNNER_TEMP/s01-artifact:/out" \
+            --volume "${rust_dir}:/opt/rust:ro" \
+            --workdir /src \
+            "${image_ref}" \
+            -c 'exec /bin/bash /probe/tools/spotify/armv6-probe-build.sh'
+
+      - name: Upload the verified probe and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: spotify-armv6-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/s01-artifact/
+          if-no-files-found: error
+          retention-days: 7
